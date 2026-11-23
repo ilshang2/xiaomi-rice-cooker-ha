@@ -94,6 +94,14 @@ resolution is 1–2 °C with ~30 s polling.
 - Do not rely on this for anything where a failed automation (HA down, Wi-Fi down) would be dangerous: if HA
   stops while the cooker is heating, it keeps heating until its own thermostat cuts off.
 
+## A wish for Xiaomi
+
+Most of this project exists because the cooker does not expose a target temperature and its app recipes are
+encoded in a format we cannot read. If Xiaomi ever documents the recipe (`cooking-data`) format, adds a
+target-temperature property, or lets the local API start the other app recipes, this hack could shrink to a
+thin card and we would be very happy to retire the on/off thermostat. Until then, this is the workaround.
+(No pressure, no affiliation. Just a hopeful note from a user who loves the little cooker.)
+
 ## Data
 
 `data/recipe-cake.csv`, `data/recipe-noodle.csv`: 10-second samples of temperature/phase for two Mi Home
