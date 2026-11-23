@@ -80,25 +80,34 @@ byte 7 is not validated.
 
 > **Sending a packet starts heating immediately.** Make sure there is water or food in the pot.
 
-## What is still unknown
+## Heating curve (partly decoded)
 
-Bytes 20–173 are the heating curve: a table of 7-byte records `91 b1 b2 78 b4 b5 b6` (plus a second table of
-14-byte blocks in some recipes). We have 15 complete curves and these observations:
+Bytes 20-173 are the heating curve: from byte 26 on, a table of 7-byte **phase records**
+`91 b1 b2 78 b4 b5 b6` (record *i* starts at byte `26 + 7*i`), plus a second table of 14-byte blocks in some
+recipes. The cooker's `phase` property (siid 4, piid 18) is the record index. Record 0 of the yogurt curve
+(`... 00 1e 00`) is a 30 s wait, and the cooker really sits in phase 0 for about 30 s.
 
-- The cooker's `phase` property follows the record index: record 2 of the noodle curve contains `1e`
-  (30), and the cooker really waits about 30 s in phase 0 → 3. Phases skip when their record holds `ff` or
-  other trivial values.
-- `b2` looks like a **temperature in °C**: the yogurt curve contains `29` (41), `28` (40) and `55` (85),
-  matching "pasteurise, then keep ~40 °C"; boil-type recipes contain `7d` (125), `6e` (110), `82` (130), `78`
-  (120), which look like "no limit" defaults.
-- `b1` of record 3 differs per recipe (`5a` noodle/keep-warm, `54` stew, `58` oden, `2b` reheat, `66` cake)
-  but the **heating rate does not depend on it** (measured), so it is not a power value. Its exact meaning is
-  open.
-- Caveat for anyone repeating the experiments: the `temp` property is a thermistor under the pot. It reads far
-  above the water temperature while heating and after adding cold water, so use trends, not single readings.
+Measured on a real cooker (yogurt curve, phase 1, 1 L of water starting at room temperature):
 
-Changing the curve is therefore **not supported**; only the header (time, schedule, keep-warm) is safe to edit.
-Pull requests that decode the curve are very welcome.
+| Field | Meaning | Evidence |
+|---|---|---|
+| **`b2`** | **target temperature of the phase, in degrees C** | `29` (41 C): heating stopped at about 44 C and the reading fell back. Changed to `37` (55 C): kept heating past 44 C up to the 54 C safety stop |
+| **`b4`** | **heating power level** | `03`: about +0.3 C/min. `10`: +2.1 C/min. `20`: +5 to 7 C/min. `40`: about +5.6 C/min (close to `20`, so it may saturate near `20`). `08`: barely beats heat loss at 67 C |
+| `b1` | not power. In record 3 it changes the entry/skip behaviour of phase 3 (`20`, `2b`, `ff` were skipped) but not the heating rate | open |
+| `b5`, `b6`, `78` and the second table | unknown | open |
+
+The default values `7d` (125), `6e` (110), `82` (130), `78` (120) that fill most records look like "no limit"
+temperatures. These findings come from yogurt phase 1 and a few noodle runs; other phases are assumed to use the
+same fields, not verified.
+
+Caveat for anyone repeating this: `temp` (siid 4, piid 30) is a thermistor under the pot. While heating hard it
+reads about 3 C or more above the water, and right after adding cold water it is wrong. Wait until the reading
+is stable first, and compare trends, not single readings. Read it live with `xiaomi_miot.get_properties` (about
+0.2 s) instead of waiting for the HA sensor.
+
+`tools/cookcode.py` can change the target temperature and power of a phase (`--phase 1 --target 45 --power 16`),
+clamped to 30-95 C and power <= 0x40. **This is experimental**: it only edits two fields of a curve we do not
+fully understand. Watch the first run, with water in the pot.
 
 ## Legal / ethics
 

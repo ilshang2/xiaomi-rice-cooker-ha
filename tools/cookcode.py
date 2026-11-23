@@ -4,6 +4,7 @@
   python cookcode.py list                      # 列出內建食譜
   python cookcode.py show 優格                  # 解析表頭
   python cookcode.py hex 優格 --minutes 300     # 改時長後輸出新封包（自動重算 CRC）
+  python cookcode.py hex 優格 --phase 1 --target 45 --power 16   # 實驗：改階段 1 目標溫度與功率
 送給電鍋（HA）：xiaomi_miot.call_action  entity_id=<電鍋實體> siid=4 aiid=1 params=["<hex>"]
 """
 import json,sys,argparse,pathlib
@@ -35,12 +36,24 @@ def set_auto_keep_warm(b,on):
     b[15]=(b[15]|0x80) if on else (b[15]&0x7F); return fix_crc(b)
 def set_taste(b,v): b[19]=v&0xFF; return fix_crc(b)
 def set_rice(b,rice_id): b[17],b[18]=(rice_id>>8)&0xFF,rice_id&0xFF; return fix_crc(b)
+def set_phase(b, phase, target_c=None, power=None):
+    """實驗功能：改第 phase 筆階段記錄的目標溫度（b2）與加熱功率（b4）。
+    記錄從第 26 位元組起每筆 7 位元組：91 b1 b2 78 b4 b5 b6。已在優格階段 1 驗證，其他階段尚未驗證。"""
+    o = 26 + 7 * phase
+    if b[o] != 0x91: raise ValueError(f"phase {phase} is not an active record")
+    if target_c is not None:
+        if not 30 <= target_c <= 95: raise ValueError("target must be 30-95 C")
+        b[o + 2] = int(target_c)
+    if power is not None:
+        if not 0 <= power <= 0x40: raise ValueError("power must be 0-64")
+        b[o + 4] = int(power)
+    return fix_crc(b)
 def start_index(b):
     """App 的做法：menu id > 4 的食譜立即開始用 index 05（存入收藏用 04）；模式 1–4 保留原值。"""
     if int.from_bytes(b[3:7],'big')>4: b[2]=0x05
     return fix_crc(b)
 if __name__=='__main__':
-    ap=argparse.ArgumentParser(); ap.add_argument('cmd'); ap.add_argument('name',nargs='?'); ap.add_argument('--minutes',type=int); ap.add_argument('--order',type=int); ap.add_argument('--keep-warm',choices=['on','off'])
+    ap=argparse.ArgumentParser(); ap.add_argument('cmd'); ap.add_argument('name',nargs='?'); ap.add_argument('--minutes',type=int); ap.add_argument('--order',type=int); ap.add_argument('--keep-warm',choices=['on','off']); ap.add_argument('--phase',type=int); ap.add_argument('--target',type=int); ap.add_argument('--power',type=int)
     a=ap.parse_args(); R=load()
     if a.cmd=='list': print('\n'.join(f'{b[6]:02x} {n}' for n,b in R.items()))
     else:
@@ -49,4 +62,5 @@ if __name__=='__main__':
         if a.minutes: set_minutes(b,a.minutes)
         if a.order is not None: set_order(b,a.order)
         if a.keep_warm: set_auto_keep_warm(b,a.keep_warm=='on')
+        if a.phase is not None: set_phase(b,a.phase,a.target,a.power)
         print(parse(b) if a.cmd=='show' else b.hex())

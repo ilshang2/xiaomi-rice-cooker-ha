@@ -39,8 +39,8 @@ The cooker exposes **no target-temperature setting**, but its recipes are plain 
   auto-keep-warm switch.
 - **Recipes tab (new)**: all 11 recipes beyond the basic modes - Stew, **Yogurt**, Baby porridge, Instant
   noodles, Cake, Simmered soup, Reheat, Oden, Hot rice, Sweet rice, Speed rice - with adjustable cooking time
-  (within the recipe's own limits), **scheduled start** and auto keep warm. The packet is built in the browser
-  and sent locally.
+  (within the recipe's own limits), **scheduled start** and auto keep warm; yogurt also has an experimental
+  **fermentation temperature** (30–50 °C). The packet is built in the browser and sent locally.
 - **Sous-vide tab (external control)**: any target 30–~75 °C, any time up to 24 h, normal (±1 °C) or quiet
   (±2.5 °C, ~¼ of the beeps) mode, over-temperature / sensor-loss protection, presets (soft-boiled egg, salmon,
   steak, chicken breast …) and a two-step baby-porridge recipe (55 °C soak, then the native congee program).
@@ -53,8 +53,9 @@ The cooker exposes **no target-temperature setting**, but its recipes are plain 
 
 ## What does *not* work (and why)
 
-- **Custom heating curves.** The curve inside a recipe packet (bytes 20–173) is only partly understood, so only
-  the header (time, schedule, keep-warm) is editable. You can run the 15 built-in recipes, not design new ones.
+- **Free-form heating curves.** The curve inside a recipe packet (bytes 20–173) is only partly decoded (target
+  temperature and power of a phase are known), so for now only the header (time, schedule, keep-warm) plus the
+  yogurt temperature are editable in the card. You can run the 15 built-in recipes, not design new ones.
   See "What is still unknown" in the [recipe format](docs/recipe-format.md).
 - The Sous-vide tab still works by switching Keep Warm on and off, so every start/stop makes the cooker
   **beep**. Quiet mode reduces how often, it cannot silence it. (The Recipes tab starts once and does not beep

@@ -38,8 +38,9 @@ const crc16 = (b) => { let c = 0; for (let i = 0; i < b.length; i++) { c ^= b[i]
 const hex2b = (h) => Uint8Array.from(h.match(/../g).map((x) => parseInt(x, 16)));
 const b2hex = (b) => Array.from(b).map((x) => x.toString(16).padStart(2, '0')).join('');
 // 依 App 的 CMCookProfile 改表頭：時長、預約、自動保溫，重算 CRC
-function buildPacket(id, min, order, akw) {
+function buildPacket(id, min, order, akw, temp) {
   const b = hex2b(PK[id][1]);
+  if (id === '06' && temp) { b[84] = temp; b[35] = temp + 1; } // 優格：階段 8 目標 40 °C、階段 1 目標 41 °C（b2＝目標溫度，實驗功能）
   if (((b[3] << 24) | (b[4] << 16) | (b[5] << 8) | b[6]) > 4) b[2] = 0x05;
   b[8] = Math.floor(min / 60) & 0xFF; b[9] = min % 60;
   if (order > 0) { b[14] = 0x80 | (Math.floor(order / 60) & 0x7F); b[15] = (b[15] & 0x80) | (order % 60); } else { b[14] = 0; b[15] &= 0x80; }
@@ -49,7 +50,7 @@ function buildPacket(id, min, order, akw) {
 }
 function recipeInfo(id) {
   const b = hex2b(PK[id][1]);
-  return { name: PK[id][0], def: b[8] * 60 + b[9], max: b[10] * 60 + b[11], min: b[12] * 60 + b[13], canOrder: !!(b[7] & 0x40), canAkw: !!(b[7] & 0x20), akw: !!(b[15] & 0x80) };
+  return { name: PK[id][0], def: b[8] * 60 + b[9], max: b[10] * 60 + b[11], min: b[12] * 60 + b[13], canOrder: !!(b[7] & 0x40), canAkw: !!(b[7] & 0x20), akw: !!(b[15] & 0x80), temp: id === '06' ? b[84] : 0 };
 }
 const TEMP_PRESETS = [50, 55, 60, 65, 70, 75];
 const TIME_PRESETS = [[30, '30 分'], [60, '1 時'], [120, '2 時'], [240, '4 時'], [480, '8 時'], [720, '12 時']];
@@ -133,11 +134,12 @@ class CookerCard extends HTMLElement {
     const tgt = this._n(E.target, 60), mins = this._n(E.mins, 120);
     if (a === 'tab') { this._tab = v; }
     else if (a === 'mode') { if (this._confirm('mode' + v)) { if (+v === 5) this._call('input_boolean', 'turn_on', { entity_id: E.pending }); this._call('xiaomi_miot', 'call_action', { entity_id: E.cooker, siid: 2, aiid: 1, params: [+v] }); } return; }
-    else if (a === 'rcsel') { const i = recipeInfo(v); this._rc = { id: v, min: i.def, order: 0, akw: i.akw }; }
+    else if (a === 'rcsel') { const i = recipeInfo(v); this._rc = { id: v, min: i.def, order: 0, akw: i.akw, temp: i.temp }; }
     else if (a === 'rcmin') { const i = recipeInfo(this._rc.id); if (i.max > i.min) this._rc.min = Math.min(i.max, Math.max(i.min, this._rc.min + +v)); }
     else if (a === 'rcord') { this._rc.order = Math.min(23 * 60 + 30, Math.max(0, this._rc.order + +v)); }
     else if (a === 'rcakw') this._rc.akw = !this._rc.akw;
-    else if (a === 'rcgo') { const r = this._rc; if (r && this._confirm('rcgo')) { this._call('xiaomi_miot', 'call_action', { entity_id: E.cooker, siid: 4, aiid: 1, params: [buildPacket(r.id, r.min, r.order, r.akw)] }); } return; }
+    else if (a === 'rctemp') { this._rc.temp = Math.min(50, Math.max(30, (this._rc.temp || 40) + +v)); }
+    else if (a === 'rcgo') { const r = this._rc; if (r && this._confirm('rcgo')) { this._call('xiaomi_miot', 'call_action', { entity_id: E.cooker, siid: 4, aiid: 1, params: [buildPacket(r.id, r.min, r.order, r.akw, r.temp)] }); } return; }
     else if (a === 'cancel') { if (this._confirm('cancel')) this._call('button', 'press', { entity_id: E.cancel }); return; }
     else if (a === 'akw') this._call('switch', 'toggle', { entity_id: E.akw });
     else if (a === 'chain') this._call('input_boolean', 'toggle', { entity_id: E.chain });
@@ -173,11 +175,12 @@ class CookerCard extends HTMLElement {
       ${!idle && !sv ? `<button class="go ${ask === 'cancel' ? 'ask' : 'stop'}" data-a="cancel">${ask === 'cancel' ? '再按一次確認停止' : '停止烹飪'}</button>` : ''}
       <div class="tog"><div>煮好自動保溫<small>煮飯完成後自動進入保溫</small></div><button class="sw ${this._s(E.akw) === 'on' ? 'on' : ''}" data-a="akw"></button></div>
       <div class="note">開始前請確認內鍋已放好食材</div>`;
-    const rc = this._rc || (this._rc = { id: '06', min: recipeInfo('06').def, order: 0, akw: recipeInfo('06').akw }), ri = recipeInfo(rc.id), adj = ri.max > ri.min;
+    const rc = this._rc || (this._rc = { id: '06', min: recipeInfo('06').def, order: 0, akw: recipeInfo('06').akw, temp: recipeInfo('06').temp }), ri = recipeInfo(rc.id), adj = ri.max > ri.min;
     const panelRc = `
       <div class="chips">${Object.keys(PK).filter((k) => parseInt(k, 16) > 4).map((k) => `<button data-a="rcsel" data-v="${k}" class="${rc.id === k ? 'on' : ''}">${PK[k][0]}</button>`).join('')}</div>
       <div class="row"><span class="l">時間${adj ? `（${this._dur(ri.min)}～${this._dur(ri.max)}）` : '（固定）'}</span><button class="step" data-a="rcmin" data-v="-10" ${adj && rc.min > ri.min ? '' : 'disabled'}>−</button><span class="v" style="font-size:18px">${this._dur(rc.min)}</span><button class="step" data-a="rcmin" data-v="10" ${adj && rc.min < ri.max ? '' : 'disabled'}>＋</button></div>
       ${ri.canOrder ? `<div class="row"><span class="l">預約</span><button class="step" data-a="rcord" data-v="-30" ${rc.order > 0 ? '' : 'disabled'}>−</button><span class="v" style="font-size:18px">${rc.order ? this._dur(rc.order) + '後開始' : '立即開始'}</span><button class="step" data-a="rcord" data-v="30">＋</button></div>` : ''}
+      ${rc.id === '06' ? `<div class="row"><span class="l">發酵溫度（實驗）</span><button class="step" data-a="rctemp" data-v="-1" ${rc.temp > 30 ? '' : 'disabled'}>−</button><span class="v" style="font-size:18px">${rc.temp} °C</span><button class="step" data-a="rctemp" data-v="1" ${rc.temp < 50 ? '' : 'disabled'}>＋</button></div>` : ''}
       ${ri.canAkw ? `<div class="tog"><div>煮好自動保溫<small>完成後保溫 24 小時</small></div><button class="sw ${rc.akw ? 'on' : ''}" data-a="rcakw"></button></div>` : ''}
       <button class="go ${ask === 'rcgo' ? 'ask' : ''}" data-a="rcgo" ${idle ? '' : 'disabled'}>${!idle ? '電鍋使用中' : ask === 'rcgo' ? '再按一次：確認內鍋已放好食材' : (rc.order ? '預約 ' : '開始 ') + ri.name}</button>
       <div class="note">本地直接送出食譜封包，不經過米家雲端</div>`;
