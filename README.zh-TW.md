@@ -20,7 +20,9 @@
 
 ![示範動畫](docs/demo.gif)
 
-**影片：**[docs/demo.mp4](docs/demo.mp4)（約 43 秒、1080p）
+[![在 YouTube 觀看](https://img.youtube.com/vi/iS_5qySGZCk/hqdefault.jpg)](https://youtu.be/iS_5qySGZCk)
+
+**▶ [在 YouTube 觀看](https://youtu.be/iS_5qySGZCk)**（約 44 秒）｜[下載 1080p mp4](docs/demo.mp4)
 
 ## 可以做到什麼
 

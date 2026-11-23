@@ -22,7 +22,9 @@ So instead of fighting the firmware, Home Assistant watches the pot temperature 
 
 ![Demo animation](docs/demo.gif)
 
-**Video:** [docs/demo.mp4](docs/demo.mp4) (≈43 s, 1080p)
+[![Watch on YouTube](https://img.youtube.com/vi/iS_5qySGZCk/hqdefault.jpg)](https://youtu.be/iS_5qySGZCk)
+
+**▶ [Watch on YouTube](https://youtu.be/iS_5qySGZCk)** (≈44 s) | [download the 1080p mp4](docs/demo.mp4)
 
 ## What you get
 
