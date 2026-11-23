@@ -1,0 +1,228 @@
+# Automations for the Xiaomi Mijia mini rice cooker (chunmi.cooker.tw1) — external sous-vide control.
+# 米家電子鍋舒肥外部控溫自動化。Entity IDs assume the device's HA entities are named
+# sensor.chunmi_tw1_c3d7_* / button.chunmi_tw1_c3d7_cancel_cooking; replace 'c3d7' with your device's suffix.
+- id: sousvide_start
+  alias: 舒肥：開始
+  description: 開啟「舒肥 run」時設定結束時間；電鍋不在待機就拒絕
+  triggers:
+  - trigger: state
+    entity_id: input_boolean.sousvide_run
+    to: 'on'
+  conditions: []
+  actions:
+  - choose:
+    - conditions:
+      - condition: not
+        conditions:
+        - condition: state
+          entity_id: sensor.chunmi_tw1_c3d7_cooker
+          state: idle
+      sequence:
+      - action: persistent_notification.create
+        data:
+          title: 舒肥
+          message: 電鍋不在待機狀態，已取消舒肥。
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.sousvide_run
+    default:
+    - action: input_datetime.set_datetime
+      target:
+        entity_id: input_datetime.sousvide_end
+      data:
+        datetime: '{{ (now() + timedelta(minutes=states(''input_number.sousvide_minutes'')|float(0))).strftime(''%Y-%m-%d
+          %H:%M:%S'') }}'
+  mode: single
+- id: sousvide_control
+  alias: 舒肥：控溫
+  description: 依水溫開關電鍋保溫模式。安靜模式用寬範圍，少響；時間到若開了「結束後煮粥」就接著啟動原廠煮粥
+  triggers:
+  - trigger: state
+    entity_id: sensor.chunmi_tw1_c3d7_temp
+  - trigger: time_pattern
+    seconds: /30
+  conditions:
+  - condition: state
+    entity_id: input_boolean.sousvide_run
+    state: 'on'
+  - condition: not
+    conditions:
+    - condition: state
+      entity_id: sensor.chunmi_tw1_c3d7_cooker
+      state:
+      - unavailable
+      - unknown
+  actions:
+  - variables:
+      temp: '{{ states(''sensor.chunmi_tw1_c3d7_temp'')|float(none) }}'
+      target: '{{ states(''input_number.sousvide_target'')|float(60) }}'
+      quiet: '{{ is_state(''input_boolean.sousvide_quiet'',''on'') }}'
+      early: '{{ 1.0 if quiet else 1.5 }}'
+      low: '{{ 4.0 if quiet else 2.0 }}'
+      heating: '{{ not is_state(''sensor.chunmi_tw1_c3d7_cooker'',''idle'') }}'
+      settled: '{{ (now() - states[''sensor.chunmi_tw1_c3d7_cooker''].last_changed).total_seconds()
+        > 25 }}'
+      finished: '{{ now().timestamp() >= as_timestamp(states(''input_datetime.sousvide_end''),
+        0) }}'
+      chain: '{{ is_state(''input_boolean.sousvide_then_porridge'',''on'') }}'
+  - choose:
+    - conditions:
+      - '{{ finished }}'
+      sequence:
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.sousvide_run
+      - action: persistent_notification.create
+        data:
+          title: 舒肥
+          message: 舒肥時間到，已停止加熱。
+      - if:
+        - condition: template
+          value_template: '{{ chain }}'
+        then:
+        - wait_template: '{{ is_state(''sensor.chunmi_tw1_c3d7_cooker'',''idle'')
+            and (now() - states[''sensor.chunmi_tw1_c3d7_cooker''].last_changed).total_seconds()
+            > 5 }}'
+          timeout: 00:01:30
+          continue_on_timeout: true
+        - if:
+          - condition: state
+            entity_id: sensor.chunmi_tw1_c3d7_cooker
+            state: idle
+          then:
+          - action: xiaomi_miot.call_action
+            data:
+              entity_id: sensor.chunmi_tw1_c3d7_cooker
+              siid: 2
+              aiid: 1
+              params:
+              - 3
+          - action: persistent_notification.create
+            data:
+              title: 舒肥
+              message: 吸水完成，已接著啟動原廠煮粥模式。
+          else:
+          - action: persistent_notification.create
+            data:
+              title: 舒肥
+              message: 吸水完成，但電鍋不在待機，沒有接著煮粥。
+    - conditions:
+      - '{{ temp is none }}'
+      sequence: []
+    - conditions:
+      - '{{ heating and temp >= target + 8 }}'
+      sequence:
+      - target:
+          entity_id: button.chunmi_tw1_c3d7_cancel_cooking
+        action: button.press
+    - conditions:
+      - '{{ heating and settled and temp >= target - early }}'
+      sequence:
+      - target:
+          entity_id: button.chunmi_tw1_c3d7_cancel_cooking
+        action: button.press
+    - conditions:
+      - '{{ (not heating) and settled and temp <= target - low }}'
+      sequence:
+      - action: xiaomi_miot.call_action
+        data:
+          entity_id: sensor.chunmi_tw1_c3d7_cooker
+          siid: 2
+          aiid: 1
+          params:
+          - 4
+  mode: single
+  max_exceeded: silent
+- id: sousvide_stop
+  alias: 舒肥：結束與保護
+  description: 關閉舒肥時取消電鍋；水溫感測離線 3 分鐘自動停止
+  triggers:
+  - trigger: state
+    entity_id: input_boolean.sousvide_run
+    to: 'off'
+    id: 'off'
+  - trigger: state
+    entity_id: sensor.chunmi_tw1_c3d7_temp
+    to:
+    - unavailable
+    - unknown
+    for: 00:03:00
+    id: lost
+  conditions: []
+  actions:
+  - if:
+    - condition: trigger
+      id: lost
+    - condition: state
+      entity_id: input_boolean.sousvide_run
+      state: 'on'
+    then:
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.sousvide_run
+    - action: persistent_notification.create
+      data:
+        title: 舒肥
+        message: 水溫感測離線超過 3 分鐘，已停止舒肥。
+    else:
+    - if:
+      - condition: not
+        conditions:
+        - condition: state
+          entity_id: sensor.chunmi_tw1_c3d7_cooker
+          state:
+          - idle
+          - unavailable
+          - unknown
+      then:
+      - target:
+          entity_id: button.chunmi_tw1_c3d7_cancel_cooking
+        action: button.press
+  - action: input_boolean.turn_off
+    target:
+      entity_id: input_boolean.sousvide_then_porridge
+  mode: single
+- id: cooker_slot5
+  alias: 電鍋：記錄自選格食譜
+  description: 從 HA 啟動自選（參數5）後，等 menu 重新回報，依尾碼記下食譜名稱
+  triggers:
+  - trigger: state
+    entity_id: sensor.chunmi_tw1_c3d7_cooker
+    to: busy
+  conditions:
+  - condition: state
+    entity_id: input_boolean.cooker_slot5_pending
+    state: 'on'
+  actions:
+  - delay: 00:00:45
+  - if:
+    - condition: template
+      value_template: '{% set m = {''06'':''優格'',''07'':''嬰兒粥'',''08'':''泡麵'',''09'':''蛋糕'',''0a'':''煲湯'',''0b'':''再加熱'',''0c'':''關東煮'',''0d'':''熱米飯'',''0e'':''香甜煮'',''0f'':''極速煮'',''05'':''燉煮''}
+        %}{{ (states(''sensor.chunmi_tw1_c3d7_menu'') | replace(''"'',''''))[-2:]
+        in m }}'
+    then:
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.cooker_slot5
+      data:
+        value: '{% set m = {''06'':''優格'',''07'':''嬰兒粥'',''08'':''泡麵'',''09'':''蛋糕'',''0a'':''煲湯'',''0b'':''再加熱'',''0c'':''關東煮'',''0d'':''熱米飯'',''0e'':''香甜煮'',''0f'':''極速煮'',''05'':''燉煮''}
+          %}{{ m[(states(''sensor.chunmi_tw1_c3d7_menu'') | replace(''"'',''''))[-2:]]
+          }}'
+  - action: input_boolean.turn_off
+    target:
+      entity_id: input_boolean.cooker_slot5_pending
+  mode: single
+- id: cooker_slot5_expire
+  alias: 電鍋：自選格待辨識逾時
+  description: 待辨識旗標開著超過 3 分鐘沒被用到就關掉，避免之後誤記
+  triggers:
+  - trigger: state
+    entity_id: input_boolean.cooker_slot5_pending
+    to: 'on'
+    for: 00:03:00
+  conditions: []
+  actions:
+  - action: input_boolean.turn_off
+    target:
+      entity_id: input_boolean.cooker_slot5_pending
+  mode: single

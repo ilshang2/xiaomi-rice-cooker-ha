@@ -1,0 +1,3 @@
+# local scratch
+*.log
+__pycache__/
