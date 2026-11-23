@@ -45,3 +45,18 @@
     target:
       entity_id: input_boolean.cooker_slot5_pending
   mode: single
+- id: cooker_prog_reset
+  alias: 電鍋：HA 啟動時清除程式進度
+  description: HA 重新啟動後，多段程式不會繼續，清掉卡片上殘留的段數與目標溫度
+  triggers:
+  - trigger: homeassistant
+    event: start
+  actions:
+  - action: input_number.set_value
+    target:
+      entity_id:
+      - input_number.cooker_prog_step
+      - input_number.cooker_prog_target
+    data:
+      value: 0
+  mode: single

@@ -1,7 +1,7 @@
 {
  "alias": "電鍋程式（多段恆溫）",
  "icon": "mdi:pot-steam-outline",
- "description": "依序執行多段恆溫食譜。packets＝每段的食譜封包（十六進位字串）、minutes＝每段分鐘數。每段封包的表頭時間等於該段分鐘數，所以 HA 當機時電鍋也會在該段結束時自己停止。",
+ "description": "依序執行多段恆溫食譜。packets＝每段的食譜封包（十六進位字串）、minutes＝每段分鐘數。每段封包的表頭時間等於該段分鐘數，電鍋通常會在時間到時自己停（實測偶有例外），程式每段結束也會主動取消。中途在電鍋或 App 手動取消，整個程式會中止；結束或中止都會通知。",
  "mode": "single",
  "fields": {
   "packets": {
@@ -19,7 +19,26 @@
    "selector": {
     "object": {}
    }
+  },
+  "targets": {
+   "name": "目標溫度",
+   "description": "每段目標溫度（只用來在卡片上顯示，可省略）",
+   "required": false,
+   "selector": {
+    "object": {}
+   }
+  },
+  "notify": {
+   "name": "通知服務",
+   "description": "完成或中止時呼叫的通知服務，例如 notify.mobile_app_xxx；預設為 HA 內建的持久通知",
+   "required": false,
+   "selector": {
+    "text": {}
+   }
   }
+ },
+ "variables": {
+  "notify_service": "{{ notify if notify is defined and notify else 'notify.persistent_notification' }}"
  },
  "sequence": [
   {
@@ -36,12 +55,26 @@
     "for_each": "{{ range(packets | length) | list }}",
     "sequence": [
      {
+      "variables": {
+       "step_secs": "{{ (minutes[repeat.item] | int) * 60 }}"
+      }
+     },
+     {
       "action": "input_number.set_value",
       "target": {
        "entity_id": "input_number.cooker_prog_step"
       },
       "data": {
        "value": "{{ repeat.item + 1 }}"
+      }
+     },
+     {
+      "action": "input_number.set_value",
+      "target": {
+       "entity_id": "input_number.cooker_prog_target"
+      },
+      "data": {
+       "value": "{{ targets[repeat.item] | int(0) if targets is defined and targets else 0 }}"
       }
      },
      {
@@ -70,18 +103,62 @@
       }
      },
      {
+      "variables": {
+       "step_end": "{{ as_timestamp(now()) + step_secs | int }}"
+      }
+     },
+     {
       "action": "input_datetime.set_datetime",
       "target": {
        "entity_id": "input_datetime.cooker_prog_end"
       },
       "data": {
-       "timestamp": "{{ as_timestamp(now()) + (minutes[repeat.item] | int) * 60 }}"
+       "timestamp": "{{ step_end }}"
       }
      },
      {
-      "delay": {
-       "minutes": "{{ minutes[repeat.item] | int }}"
-      }
+      "wait_template": "{{ not is_state('sensor.chunmi_tw1_c3d7_cooker', 'idle') }}",
+      "timeout": "00:00:40",
+      "continue_on_timeout": true
+     },
+     {
+      "wait_template": "{{ is_state('sensor.chunmi_tw1_c3d7_cooker', 'idle') }}",
+      "timeout": {
+       "seconds": "{{ step_secs | int + 180 }}"
+      },
+      "continue_on_timeout": true
+     },
+     {
+      "if": [
+       {
+        "condition": "template",
+        "value_template": "{{ as_timestamp(now()) < step_end | float - 90 }}"
+       }
+      ],
+      "then": [
+       {
+        "action": "input_number.set_value",
+        "target": {
+         "entity_id": [
+          "input_number.cooker_prog_step",
+          "input_number.cooker_prog_target"
+         ]
+        },
+        "data": {
+         "value": 0
+        }
+       },
+       {
+        "action": "{{ notify_service }}",
+        "data": {
+         "title": "電鍋",
+         "message": "第 {{ repeat.item + 1 }} 段中途被取消，程式已中止"
+        }
+       },
+       {
+        "stop": "手動取消，程式中止"
+       }
+      ]
      }
     ]
    }
@@ -95,10 +172,20 @@
   {
    "action": "input_number.set_value",
    "target": {
-    "entity_id": "input_number.cooker_prog_step"
+    "entity_id": [
+     "input_number.cooker_prog_step",
+     "input_number.cooker_prog_target"
+    ]
    },
    "data": {
     "value": 0
+   }
+  },
+  {
+   "action": "{{ notify_service }}",
+   "data": {
+    "title": "電鍋",
+    "message": "{{ packets | length }} 段程式已完成"
    }
   }
  ]

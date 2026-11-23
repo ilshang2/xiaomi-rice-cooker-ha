@@ -13,6 +13,13 @@ input_number:
     max: 20
     step: 1
     mode: box
+  cooker_prog_target:     # target temperature of the current step (shown on the card ring)
+    name: Cooker program target
+    min: 0
+    max: 90
+    step: 1
+    mode: box
+    unit_of_measurement: "°C"
 input_boolean:
   cooker_slot5_pending:
     name: Cooker custom slot pending

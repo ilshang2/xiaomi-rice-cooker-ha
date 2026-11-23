@@ -6,7 +6,7 @@ const E = {
   akw: 'switch.chunmi_tw1_c3d7_auto_keep_warm', sel: 'select.chunmi_tw1_c3d7_start_cook',
   cancel: 'button.chunmi_tw1_c3d7_cancel_cooking',
   menu: 'sensor.chunmi_tw1_c3d7_menu', slot: 'input_text.cooker_slot5', pending: 'input_boolean.cooker_slot5_pending',
-  prog: 'script.cooker_program', pstep: 'input_number.cooker_prog_step', ptotal: 'input_number.cooker_prog_total', pend: 'input_datetime.cooker_prog_end',
+  prog: 'script.cooker_program', pstep: 'input_number.cooker_prog_step', ptotal: 'input_number.cooker_prog_total', pend: 'input_datetime.cooker_prog_end', ptgt: 'input_number.cooker_prog_target',
 };
 const MODES = [ // [start-cook 參數, 名稱, 圖示]；7–15 電鍋會拒絕
   [1, '精煮飯', 'mdi:creation'], [2, '快煮飯', 'mdi:lightning-bolt'],
@@ -140,7 +140,7 @@ class CookerCard extends HTMLElement {
   }
   _act(a, v) {
     if (a === 'tab') { this._tab = v; }
-    else if (a === 'mode') { if (this._confirm('mode' + v)) { if (+v === 5) this._call('input_boolean', 'turn_on', { entity_id: E.pending }); this._call('xiaomi_miot', 'call_action', { entity_id: E.cooker, siid: 2, aiid: 1, params: [+v] }); } return; }
+    else if (a === 'mode') { if (this._confirm('mode' + v)) { this._call('input_number', 'set_value', { entity_id: E.ptgt, value: 0 }); if (+v === 5) this._call('input_boolean', 'turn_on', { entity_id: E.pending }); this._call('xiaomi_miot', 'call_action', { entity_id: E.cooker, siid: 2, aiid: 1, params: [+v] }); } return; }
     else if (a === 'csel') { const x = HOLD_PRESETS[+v]; if (x) this._cs.steps = x[1].map((q) => q.slice()); }
     else if (a === 'cadd') { if (this._cs.steps.length < 8) { const l = this._cs.steps[this._cs.steps.length - 1] || [60, 60]; this._cs.steps.push(l.slice()); } }
     else if (a === 'cdel') { if (this._cs.steps.length > 1) this._cs.steps.splice(+v, 1); }
@@ -150,24 +150,24 @@ class CookerCard extends HTMLElement {
     else if (a === 'cgo') {
       const st = this._cs.steps, pw = this._cs.power;
       if (this._confirm('cgo')) {
-        if (st.length === 1) this._call('xiaomi_miot', 'call_action', { entity_id: E.cooker, siid: 4, aiid: 1, params: [buildHold(st[0][0], st[0][1], pw)] });
-        else this._call('script', 'cooker_program', { packets: st.map(([t, m]) => buildHold(t, m, pw)), minutes: st.map(([, m]) => m) });
+        if (st.length === 1) { this._call('input_number', 'set_value', { entity_id: E.ptgt, value: st[0][0] }); this._call('xiaomi_miot', 'call_action', { entity_id: E.cooker, siid: 4, aiid: 1, params: [buildHold(st[0][0], st[0][1], pw)] }); }
+        else this._call('script', 'cooker_program', { packets: st.map(([t, m]) => buildHold(t, m, pw)), minutes: st.map(([, m]) => m), targets: st.map(([t]) => t) });
       } return;
     }
-    else if (a === 'cstop') { if (this._confirm('cstop')) { this._call('script', 'turn_off', { entity_id: E.prog }); this._call('button', 'press', { entity_id: E.cancel }); this._call('input_number', 'set_value', { entity_id: E.pstep, value: 0 }); } return; }
+    else if (a === 'cstop') { if (this._confirm('cstop')) { this._call('script', 'turn_off', { entity_id: E.prog }); this._call('button', 'press', { entity_id: E.cancel }); this._call('input_number', 'set_value', { entity_id: E.pstep, value: 0 }); this._call('input_number', 'set_value', { entity_id: E.ptgt, value: 0 }); } return; }
     else if (a === 'rcsel') { const i = recipeInfo(v); this._rc = { id: v, min: i.def, order: 0, akw: i.akw, temp: i.temp }; }
     else if (a === 'rcmin') { const i = recipeInfo(this._rc.id); if (i.max > i.min) this._rc.min = Math.min(i.max, Math.max(i.min, this._rc.min + +v)); }
     else if (a === 'rcord') { this._rc.order = Math.min(23 * 60 + 30, Math.max(0, this._rc.order + +v)); }
     else if (a === 'rcakw') this._rc.akw = !this._rc.akw;
     else if (a === 'rctemp') { this._rc.temp = Math.min(50, Math.max(30, (this._rc.temp || 40) + +v)); }
-    else if (a === 'rcgo') { const r = this._rc; if (r && this._confirm('rcgo')) { this._call('xiaomi_miot', 'call_action', { entity_id: E.cooker, siid: 4, aiid: 1, params: [buildPacket(r.id, r.min, r.order, r.akw, r.temp)] }); } return; }
+    else if (a === 'rcgo') { const r = this._rc; if (r && this._confirm('rcgo')) { this._call('input_number', 'set_value', { entity_id: E.ptgt, value: 0 }); this._call('xiaomi_miot', 'call_action', { entity_id: E.cooker, siid: 4, aiid: 1, params: [buildPacket(r.id, r.min, r.order, r.akw, r.temp)] }); } return; }
     else if (a === 'cancel') { if (this._confirm('cancel')) this._call('button', 'press', { entity_id: E.cancel }); return; }
     else if (a === 'akw') this._call('switch', 'toggle', { entity_id: E.akw });
     this._sig = ''; this._render();
   }
   _render() {
     const st = this._s(E.cooker), idle = st === 'idle';
-    const temp = this._n(E.temp);
+    const temp = this._n(E.temp), tgt = st === 'busy' ? this._n(E.ptgt) : 0;
     const tab = this._tab || (this._s(E.prog) === 'on' ? 'cs' : 'cook');
     const left = this._n(E.left), total = this._n(E.cook) * 60;
     let remain = null, pct = 0;
@@ -178,7 +178,8 @@ class CookerCard extends HTMLElement {
     const acc = st === 'unavailable' ? '#9e9e9e' : st === 'busy' ? '#ef6c00' : st === 'keep warm' ? '#f4a100' : st === 'delay' ? '#7e57c2' : 'var(--primary-color)';
     // 溫度環：270° 弧，0–100°C
     const R = 90, C = 2 * Math.PI * R, arc = C * 0.75, frac = Math.min(1, Math.max(0, temp / 100));
-    const sub = remain != null && st === 'busy' ? `剩 ${this._fmt(remain)}` : st === 'keep warm' ? `已保溫 ${this._fmt(left)}` : '內鍋溫度';
+    const ang = (270 * (tgt / 100)) * Math.PI / 180, tx = 100 + R * Math.cos(ang), ty = 100 + R * Math.sin(ang);
+    const sub = tgt && remain != null ? `目標 ${tgt}°C · 剩 ${this._fmt(remain)}` : remain != null && st === 'busy' ? `剩 ${this._fmt(remain)}` : st === 'keep warm' ? `已保溫 ${this._fmt(left)}` : '內鍋溫度';
     const ask = this._ask;
     const panelCook = `
       <div class="grid">${MODES.map(([o, n, i]) => `<button class="mode ${ask === 'mode' + o ? 'ask' : ''}" data-a="mode" data-v="${o}" ${idle ? '' : 'disabled style="opacity:.4"'}><ha-icon icon="${i}"></ha-icon>${ask === 'mode' + o ? '再按一次確認' : (o === 5 ? slotTxt : n)}</button>`).join('')}</div>
@@ -210,13 +211,14 @@ class CookerCard extends HTMLElement {
       ${prog ? `<div class="note" style="margin-top:12px">程式執行中：第 ${pstep}／${ptotal} 段${pendTxt ? '，本段 ' + pendTxt + ' 結束' : ''}</div>
         <button class="go ${ask === 'cstop' ? 'ask' : 'stop'}" data-a="cstop">${ask === 'cstop' ? '再按一次確認停止' : '停止程式'}</button>`
       : `<button class="go ${ask === 'cgo' ? 'ask' : ''}" data-a="cgo" ${idle ? '' : 'disabled'}>${!idle ? '電鍋使用中' : ask === 'cgo' ? '再按一次：確認內鍋已放好食材與水' : cs.steps.length > 1 ? `開始 ${cs.steps.length} 段程式` : '開始恆溫'}</button>`}
-      <div class="note">電鍋自己控溫、時間到自己停。多段程式每換一段會嗶一聲${cs.steps.length > 1 ? `；總長 ${this._dur(cs.steps.reduce((a, q) => a + q[1], 0))}` : ''}。<br>鍋底感測器會比水溫高約 1～3 °C，請以食材溫度計為準。</div>`;
+      <div class="note">電鍋自己控溫；時間到通常會自己停，多段程式每段結束由 HA 取消並換段（換段會嗶一聲${cs.steps.length > 1 ? `；總長 ${this._dur(cs.steps.reduce((a, q) => a + q[1], 0))}` : ''}）。<br>鍋底感測器會比水溫高約 1～3 °C，請以食材溫度計為準。</div>`;
     this.shadowRoot.innerHTML = `<style>${css}</style>
     <ha-card style="--acc:${acc}">
       <div class="top"><ha-icon icon="mdi:pot-steam-outline" style="color:var(--acc)"></ha-icon><div class="t">米家電子鍋</div><div class="chip">${label}</div></div>
       <div class="ring"><svg viewBox="0 0 200 200">
         <circle cx="100" cy="100" r="${R}" fill="none" stroke="currentColor" stroke-opacity=".12" stroke-width="14" stroke-linecap="round" stroke-dasharray="${arc} ${C}"/>
         <circle cx="100" cy="100" r="${R}" fill="none" stroke="var(--acc)" stroke-width="14" stroke-linecap="round" stroke-dasharray="${arc * frac} ${C}"/>
+        ${tgt ? `<circle cx="${tx}" cy="${ty}" r="8" fill="#fff" stroke="var(--acc)" stroke-width="4"/>` : ''}
       </svg><div class="c"><div class="big">${st === 'unavailable' ? '--' : temp}<small>°C</small></div><div class="sub">${sub}</div></div></div>
       ${remain != null ? `<div class="bar"><i style="width:${pct}%"></i></div>` : '<div style="height:12px"></div>'}
       <div class="seg"><button data-a="tab" data-v="cook" class="${tab === 'cook' ? 'on' : ''}">烹飪</button><button data-a="tab" data-v="rc" class="${tab === 'rc' ? 'on' : ''}">食譜</button><button data-a="tab" data-v="cs" class="${tab === 'cs' ? 'on' : ''}">舒肥</button></div>

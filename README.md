@@ -45,8 +45,8 @@ The cooker exposes **no target-temperature setting**, but its recipes are plain 
   per step, up to 8 steps (presets: onsen egg, chicken breast, steak, salmon, yogurt, slow stew, soak-then-cook).
   One step is sent as a single packet (the cooker thermostats itself, no beeping); several steps run through
   `script.cooker_program` ([`ha/cooker_program.script.json`](ha/cooker_program.script.json)), which cancels, waits
-  for idle and sends the next packet when a step ends. Each packet carries its own duration, so the cooker stops
-  by itself even if HA dies. The temperature is held through the yogurt flow, see
+  for idle and sends the next packet when a step ends. Each packet carries its own duration and the cooker normally stops by itself at the end of a step (we saw it twice keep
+  running in a 480-min hold instead, so the script also cancels at every step end). If you pass `targets`, the card marks them on the ring. The temperature is held through the yogurt flow, see
   [recipe format](docs/recipe-format.md#custom-constant-temperature-recipes).
 - [`tools/cookcode.py`](tools/cookcode.py) and [`data/recipes.json`](data/recipes.json): build and send recipe
   packets from scripts and automations.
@@ -102,8 +102,9 @@ The cooker exposes **no target-temperature setting**, but its recipes are plain 
   food safety**; low temperatures (< 55 °C) and long times carry a bacterial risk. Baby food: follow a
   paediatric guideline, not this repository.
 - Never call the cooker's `set-factory-reset` action (siid 4, aiid 4) or write its `bell` property.
-- A multi-step program depends on HA to switch steps: if HA dies mid-program the current step simply ends on the
-  cooker's own timer (it never keeps heating indefinitely).
+- A multi-step program depends on HA to switch steps and to cancel at the end. The cooker normally stops by itself when a
+  step's time is up, but twice in testing it did not and continued in a 480-minute hold, so do not leave a program running
+  unattended if HA or the network is unreliable. Cancelling the program by hand (cooker or app) aborts the whole program and notifies you.
 
 ## A wish for Xiaomi
 
