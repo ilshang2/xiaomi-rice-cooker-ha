@@ -14,12 +14,12 @@ MIoT 規格：<https://home.miot-spec.com/spec/chunmi.cooker.tw1>
 | 2.1 | 電鍋狀態 | 1 待機、2 烹飪、3 保溫、4 預約。HA 顯示 `idle` / `busy` / `keep warm` / `delay` |
 | 2 / aiid 1 | start-cook（參數 piid 6） | **只接受 1～6**，見下表 |
 | 2 / aiid 2 | cancel | `button.…_cancel_cooking` |
-| 4.15 | cooking-data（字串） | 格式未知 |
+| 4.15 | cooking-data（字串） | 只寫；176 位元組食譜封包，見 [recipe-format.zh-TW.md](recipe-format.zh-TW.md) |
 | 4.16 | bell | **千萬不要寫入** |
 | 4.17 / 4.18 / 4.19 | status / phase / menu | menu 是 20 位元組的十六進位表頭，見下 |
 | 4.20 / 4.21 | t-cook（分）/ t-left（秒） | |
 | 4.30 | temp（°C） | 解析度 1～2 °C，本地輪詢約 30 秒 |
-| 4 / aiid 1, 3 | set-start、set-menu（cooking-data） | 回傳碼 0，但我們試過的所有字串都**被靜默忽略** |
+| 4 / aiid 1, 3 | set-start、set-menu（cooking-data） | 送完整的 176 位元組封包（表頭＋曲線＋CRC16/XMODEM）**有效**；較短或不合法的回傳 0 但被靜默忽略 |
 | 4 / aiid 4 | set-factory-reset | **不要呼叫** |
 
 整份規格裡**沒有目標溫度屬性**。
@@ -69,17 +69,15 @@ MIoT 規格：<https://home.miot-spec.com/spec/chunmi.cooker.tw1>
 
 ## 試過但沒破解的
 
-- **App 食譜編碼。** 米家 App 經由小米雲端控制電鍋（電鍋對雲端主機開 TLS 連線，啟動／停止時有 12～15 KB 的封包）。
-  區網裡只看得到 UDP 54321 的 miIO 探索與輪詢。
-- 手機 `adb logcat`：沒有有用資訊。`mitmproxy` 搭配使用者安裝的 CA：App（與其他 App）不接受。我們就停在這裡；
-  剩下的路是 root 手機把 CA 裝進系統，或修改 APK。
-- 用 `set-start` / `set-menu` 寫入任意 `cooking-data`：接受但忽略。舊的 python-miio `set_start` 設定檔格式
-  （一般／壓力型電鍋的十六進位字串）不適用這個型號。
+- **App 食譜編碼：已解開**（見 [recipe-format.zh-TW.md](recipe-format.zh-TW.md)）。是用 Frida 掛在 root 手機上的米家
+  找到的；電鍋自己的外掛替每個表頭欄位命了名。早期嘗試被忽略，只是因為沒有加熱曲線。
+- **加熱曲線**的位元組仍只解開一部分。
+- `mitmproxy` 搭配使用者安裝的 CA 會被 App 拒絕；`adb logcat` 沒有有用資訊。
 - 小米雲端 API 對這台裝置回 403，我們沒有嘗試繞過。
 - MikroTik 路由器的硬體加速會讓同一個橋接埠內的裝置互傳流量看不到，所以區網監聽時手機和電鍋要接不同埠。
 
 ## 給貢獻者的想法
 
-- 用 root 手機／系統 CA 抓真實的 App 啟動封包，解出 `cooking-data`。
+- 解開加熱曲線的記錄（見 [recipe-format.zh-TW.md](recipe-format.zh-TW.md) 的「尚未解開的部分」）。
 - 測試其他韌體／型號（`chunmi.cooker.*`）是否有更多 `start-cook` 參數。
 - 更好的舒肥做法（保溫模式做 PWM？）與經過驗證的溫度上限。

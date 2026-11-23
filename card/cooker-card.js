@@ -17,8 +17,40 @@ const MODES = [ // [start-cook 參數, 名稱, 圖示]；7–15 電鍋會拒絕
 const RECIPES = { '06': '優格', '07': '嬰兒粥', '08': '泡麵', '09': '蛋糕', '0a': '煲湯', '0b': '再加熱', '0c': '關東煮', '0d': '熱米飯', '0e': '香甜煮', '0f': '極速煮' };
 // 舒肥食譜：[名稱, 溫度°C, 分鐘, 結束後接原廠煮粥?]（一般經驗值，可再用下方微調）
 const SV_RECIPES = [['嬰兒粥（吸水＋煮粥）', 55, 30, true], ['優格', 42, 480], ['低溫優格', 38, 480], ['溫泉蛋', 65, 60], ['鮭魚', 50, 40], ['牛排', 55, 90], ['雞胸', 62, 90], ['豬里肌', 62, 120], ['軟嫩雞腿', 68, 120]];
-// App 食譜（HA 無法啟動，只列出原廠時間）：[名稱, 分鐘]
-const APP_ONLY = [['優格', 360], ['嬰兒粥', 180], ['泡麵', 20], ['蛋糕', 60], ['煲湯', 120], ['關東煮', 90], ['熱米飯', 30], ['香甜煮', 70], ['極速煮', 30]];
+const PK = { // 食譜封包（id → [名稱, 176 位元組十六進位]），來源見 cooker/docs/cookcode-format.md
+  '01': ['精煮飯', '02010000000001e101000000000000800100000000000000002091827d7800050091822d781c080091823c781c280091ff857820ffff91828578000700ffff8578ffffff91828578000d00ff828778ff000091827d7800000091827d7800ffff91826078ff01114b02667d0801086b0078090301f75602667d09010a6d00780a02025a5701667d0e010a71007a0c02ffff5701667d10010a72007d0c03200502030a0000000000000000000000000c43'],
+  '02': ['快煮飯', '02010100000002e10028000000000080010000000000000000209182827800000091823c7820000091823c781c280091ff857820ffff91828578000600ffff8578ffffff91828578000d00ff828778ff000082827d7800000091827d7800ffff91826078ff015f4b03667d08010a6b0074070302465602667d09010a6d0076080302915701667d0f010a7100780803ffff5701667d11010a72007b0803200502030a00000000000000000000000001bb'],
+  '03': ['煮粥', '02010200000003e2011e0400002800800100000000000000002091827d7800000091827d7800000091827d78001e0091ff877820ffff91827d78001e0091ff8278ffffff91828278001e0091828278060f0091827d7804000091827d7800000091827d780001914e02552c1802062a04820300025a4e02552a1802062b0482030003234e0252271802062f04820501ffff4e015224180206310482050120000000000000000000000000000000003629'],
+  '04': ['保溫', '020103000000040c18001800000100800100000000000000002091827d7800000091827d7800000091827d78000000915a7d7820000091827d7800000091826e78ff000091827d7800000091826e7810000091826e7810000091827d7800000091827d780000a082007882140010871478030000eb820078821400108714780300012d8200788214001087147a0501ffff8200788214001087147d05012000000000000000000000000000000000f2d7'],
+  '05': ['燉煮', '02010500000005e701000400001e00800100000000000000002091827d7800000091827d7800000091827d78001e0091547d7820000091827d7800000091826e78ff000091827d7800000091826e7800ffff91827d7818000091827d7800000091827d780000a082007882140010871478030000eb820078821400108714780300012d8200788214001087147a0501ffff8200788214001087147d0501200e780000000000000000000000000000d211'],
+  '06': ['優格', '020105000000068908000c00060000000100000000000000002091827d78001e009182297803000091827d78000000913c7d7814000091827d7800000091826e7800000091827d780000009182557810ffff9182287802000091827d780000009182557810000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000001f50'],
+  '07': ['嬰兒粥', '02010500000007e203000400021e00800100000000000000002091827d7800000091827d7800000091827d78001e0091ff877820ffff91827d78001e0091ff8278ffffff91828278001e0091828278060f0091827d7804000091827d7800000091827d780001914e02552c1802062a04820300025a4e02552a1802062c0482030003234e0252271802062e04820501ffff4e01522418020632048205012000000000000000000000000000000000ea69'],
+  '08': ['泡麵', '020105000000088d00140014001400000100000000000000002091827d7800000091827d7800000091827d78001e00915a7d7820000091827d7800000091826e7800000091827d7800000091826e7810ffff91827d7818000091827d7800000091827d7800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000020183c0000000000000000000000000000c3cd'],
+  '09': ['蛋糕', '020105000000098801000100003700000100000000000000002091827d7800000091827d7800000091827d78001e0066787d7816000091827d7800000091826e7800000091827d7800000091826e7810ffff918266780a000091827d7800000091827d78000000000078821400108714780300000000007882140010871478030000000000788214001087147a050100000000788214001087147d05012000000000000000000000000000000000f188'],
+  '0a': ['煲湯', '0201050000000ae502000400011e00800100000000000000002091827d7800000091827d7800000091827d78001e0091ff877820ffff91827d78001e0091ff8278ffffff91828278001e0091828278070f0091827d7805000091827d7800000091827d780001914e0255251801062804820300025a4e025522180106280482030003234e0155211801062a04820501ffff4e0155241801062c0482050120000000000000000000000000000000002c85'],
+  '0b': ['再加熱', '0201050000000ba4001e0023001900800100000000000000002091827d7800000091827d7800000091827d78000f00912b7d7810000091827d7800000091826e78ff000091827d780000009182557810ffff9182507814000091827d780000009182557810000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000005085'],
+  '0c': ['關東煮', '0201050000000cee011e011e011e00000100000000000000002091827d7800000091827d7800000091827d78001e00915882782000009182827800000091826e7800000091827d780000009182827818ffff9182827816000091827d7800000091827d78000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000200f780000000000000000000000000000f8a9'],
+  '0d': ['熱米飯', '0201050000000da4001e0023001900800100000000000000002091827d7800000091827d7800000091827d78000f00912b7d7810000091827d7800000091826e78ff000091827d780000009182557810ffff9182507814000091827d780000009182557810000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000a5b'],
+  '0e': ['香甜煮', '0201050000000ee1010a0000000000800100000000000000002091827d7800060091822d781c0a0091823c781c280091ff857820ffff91828578000700ffff8578ffffff91828578001400ff828778ff000091827d7800000091827d7800ffff91826078ff01114b02667d0801056e00780c0301f75202667d0901056f00780c04025a5402667d0e010571007a0f04ffff5701667d10010672007d0f042005020305000000000000000000000000fc5e'],
+  '0f': ['極速煮', '0201050000000fe1001e000000000080010000000000000000209182827800000091823c7820000091823c781c280091ff857820ffff91828578000300ffff8578ffffff91828578000a00ff828778ff000082827d7800000091827d7800ffff91826078ff015f48015d7d0802086e00740403024650015e7d0902096f0076040302915201667d0e010d7000780503ffff5201667d10010d72007b050320000102130000000000000000000000004652'],
+};
+const crc16 = (b) => { let c = 0; for (let i = 0; i < b.length; i++) { c ^= b[i] << 8; for (let k = 0; k < 8; k++) c = (c & 0x8000) ? ((c << 1) ^ 0x1021) & 0xFFFF : (c << 1) & 0xFFFF; } return c; };
+const hex2b = (h) => Uint8Array.from(h.match(/../g).map((x) => parseInt(x, 16)));
+const b2hex = (b) => Array.from(b).map((x) => x.toString(16).padStart(2, '0')).join('');
+// 依 App 的 CMCookProfile 改表頭：時長、預約、自動保溫，重算 CRC
+function buildPacket(id, min, order, akw) {
+  const b = hex2b(PK[id][1]);
+  if (((b[3] << 24) | (b[4] << 16) | (b[5] << 8) | b[6]) > 4) b[2] = 0x05;
+  b[8] = Math.floor(min / 60) & 0xFF; b[9] = min % 60;
+  if (order > 0) { b[14] = 0x80 | (Math.floor(order / 60) & 0x7F); b[15] = (b[15] & 0x80) | (order % 60); } else { b[14] = 0; b[15] &= 0x80; }
+  b[15] = akw ? (b[15] | 0x80) : (b[15] & 0x7F);
+  const c = crc16(b.subarray(0, 174)); b[174] = c >> 8; b[175] = c & 0xFF;
+  return b2hex(b);
+}
+function recipeInfo(id) {
+  const b = hex2b(PK[id][1]);
+  return { name: PK[id][0], def: b[8] * 60 + b[9], max: b[10] * 60 + b[11], min: b[12] * 60 + b[13], canOrder: !!(b[7] & 0x40), canAkw: !!(b[7] & 0x20), akw: !!(b[15] & 0x80) };
+}
 const TEMP_PRESETS = [50, 55, 60, 65, 70, 75];
 const TIME_PRESETS = [[30, '30 分'], [60, '1 時'], [120, '2 時'], [240, '4 時'], [480, '8 時'], [720, '12 時']];
 const STATE_TEXT = { idle: '待機', busy: '烹飪中', 'keep warm': '保溫中', delay: '預約中' };
@@ -75,14 +107,14 @@ ha-card { padding:16px; --acc: var(--primary-color); overflow:hidden; }
 `;
 
 class CookerCard extends HTMLElement {
-  setConfig() { this._tab = null; this._ask = null; this._sig = ''; }
+  setConfig() { this._tab = null; this._ask = null; this._sig = ''; this._rc = null; }
   getCardSize() { return 9; }
   connectedCallback() { if (!this.shadowRoot) { this.attachShadow({ mode: 'open' }); } }
   set hass(h) {
     this._h = h;
     if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
     const s = (e) => (h.states[e] ? h.states[e].state : 'na');
-    const sig = Object.values(E).map(s).join('|') + '|' + this._tab + '|' + this._ask + '|' + Math.floor(Date.now() / 60000);
+    const sig = Object.values(E).map(s).join('|') + '|' + this._tab + '|' + JSON.stringify(this._rc) + '|' + this._ask + '|' + Math.floor(Date.now() / 60000);
     if (sig === this._sig) return;
     this._sig = sig; this._render();
   }
@@ -101,6 +133,11 @@ class CookerCard extends HTMLElement {
     const tgt = this._n(E.target, 60), mins = this._n(E.mins, 120);
     if (a === 'tab') { this._tab = v; }
     else if (a === 'mode') { if (this._confirm('mode' + v)) { if (+v === 5) this._call('input_boolean', 'turn_on', { entity_id: E.pending }); this._call('xiaomi_miot', 'call_action', { entity_id: E.cooker, siid: 2, aiid: 1, params: [+v] }); } return; }
+    else if (a === 'rcsel') { const i = recipeInfo(v); this._rc = { id: v, min: i.def, order: 0, akw: i.akw }; }
+    else if (a === 'rcmin') { const i = recipeInfo(this._rc.id); if (i.max > i.min) this._rc.min = Math.min(i.max, Math.max(i.min, this._rc.min + +v)); }
+    else if (a === 'rcord') { this._rc.order = Math.min(23 * 60 + 30, Math.max(0, this._rc.order + +v)); }
+    else if (a === 'rcakw') this._rc.akw = !this._rc.akw;
+    else if (a === 'rcgo') { const r = this._rc; if (r && this._confirm('rcgo')) { this._call('xiaomi_miot', 'call_action', { entity_id: E.cooker, siid: 4, aiid: 1, params: [buildPacket(r.id, r.min, r.order, r.akw)] }); } return; }
     else if (a === 'cancel') { if (this._confirm('cancel')) this._call('button', 'press', { entity_id: E.cancel }); return; }
     else if (a === 'akw') this._call('switch', 'toggle', { entity_id: E.akw });
     else if (a === 'chain') this._call('input_boolean', 'toggle', { entity_id: E.chain });
@@ -135,9 +172,15 @@ class CookerCard extends HTMLElement {
       <div class="grid">${MODES.map(([o, n, i]) => `<button class="mode ${ask === 'mode' + o ? 'ask' : ''}" data-a="mode" data-v="${o}" ${idle ? '' : 'disabled style="opacity:.4"'}><ha-icon icon="${i}"></ha-icon>${ask === 'mode' + o ? '再按一次確認' : (o === 5 ? slotTxt : n)}</button>`).join('')}</div>
       ${!idle && !sv ? `<button class="go ${ask === 'cancel' ? 'ask' : 'stop'}" data-a="cancel">${ask === 'cancel' ? '再按一次確認停止' : '停止烹飪'}</button>` : ''}
       <div class="tog"><div>煮好自動保溫<small>煮飯完成後自動進入保溫</small></div><button class="sw ${this._s(E.akw) === 'on' ? 'on' : ''}" data-a="akw"></button></div>
-      <div class="row"><span class="l">App 食譜（需用 App 啟動）</span></div>
-      <div class="chips">${APP_ONLY.map(([n, m]) => `<button disabled>${n} ${m}分</button>`).join('')}</div>
       <div class="note">開始前請確認內鍋已放好食材</div>`;
+    const rc = this._rc || (this._rc = { id: '06', min: recipeInfo('06').def, order: 0, akw: recipeInfo('06').akw }), ri = recipeInfo(rc.id), adj = ri.max > ri.min;
+    const panelRc = `
+      <div class="chips">${Object.keys(PK).filter((k) => parseInt(k, 16) > 4).map((k) => `<button data-a="rcsel" data-v="${k}" class="${rc.id === k ? 'on' : ''}">${PK[k][0]}</button>`).join('')}</div>
+      <div class="row"><span class="l">時間${adj ? `（${this._dur(ri.min)}～${this._dur(ri.max)}）` : '（固定）'}</span><button class="step" data-a="rcmin" data-v="-10" ${adj && rc.min > ri.min ? '' : 'disabled'}>−</button><span class="v" style="font-size:18px">${this._dur(rc.min)}</span><button class="step" data-a="rcmin" data-v="10" ${adj && rc.min < ri.max ? '' : 'disabled'}>＋</button></div>
+      ${ri.canOrder ? `<div class="row"><span class="l">預約</span><button class="step" data-a="rcord" data-v="-30" ${rc.order > 0 ? '' : 'disabled'}>−</button><span class="v" style="font-size:18px">${rc.order ? this._dur(rc.order) + '後開始' : '立即開始'}</span><button class="step" data-a="rcord" data-v="30">＋</button></div>` : ''}
+      ${ri.canAkw ? `<div class="tog"><div>煮好自動保溫<small>完成後保溫 24 小時</small></div><button class="sw ${rc.akw ? 'on' : ''}" data-a="rcakw"></button></div>` : ''}
+      <button class="go ${ask === 'rcgo' ? 'ask' : ''}" data-a="rcgo" ${idle ? '' : 'disabled'}>${!idle ? '電鍋使用中' : ask === 'rcgo' ? '再按一次：確認內鍋已放好食材' : (rc.order ? '預約 ' : '開始 ') + ri.name}</button>
+      <div class="note">本地直接送出食譜封包，不經過米家雲端</div>`;
     const panelSv = `
       <div class="row"><span class="l">食譜</span></div>
       <div class="chips">${SV_RECIPES.map(([n, t, m, ch], i) => `<button data-a="recipe" data-v="${i}" class="${tgt === t && mins === m && !!ch === chain ? 'on' : ''}" ${sv ? 'disabled' : ''}>${n}</button>`).join('')}</div>
@@ -158,12 +201,12 @@ class CookerCard extends HTMLElement {
         ${sv ? `<circle cx="${tx}" cy="${ty}" r="8" fill="#fff" stroke="var(--acc)" stroke-width="4"/>` : ''}
       </svg><div class="c"><div class="big">${st === 'unavailable' ? '--' : temp}<small>°C</small></div><div class="sub">${sub}</div></div></div>
       ${remain != null ? `<div class="bar"><i style="width:${pct}%"></i></div>` : '<div style="height:12px"></div>'}
-      <div class="seg"><button data-a="tab" data-v="cook" class="${tab === 'cook' ? 'on' : ''}">烹飪</button><button data-a="tab" data-v="sv" class="${tab === 'sv' ? 'on' : ''}">舒肥</button></div>
-      ${tab === 'cook' ? panelCook : panelSv}
+      <div class="seg"><button data-a="tab" data-v="cook" class="${tab === 'cook' ? 'on' : ''}">烹飪</button><button data-a="tab" data-v="rc" class="${tab === 'rc' ? 'on' : ''}">食譜</button><button data-a="tab" data-v="sv" class="${tab === 'sv' ? 'on' : ''}">舒肥</button></div>
+      ${tab === 'cook' ? panelCook : tab === 'rc' ? panelRc : panelSv}
     </ha-card>`;
     this.shadowRoot.querySelectorAll('[data-a]').forEach((b) => b.addEventListener('click', () => this._act(b.dataset.a, b.dataset.v)));
   }
 }
 customElements.define('cooker-card', CookerCard);
 window.customCards = window.customCards || [];
-window.customCards.push({ type: 'cooker-card', name: '米家電子鍋', description: '電子鍋與舒肥外部控溫' });
+window.customCards.push({ type: 'cooker-card', name: '米家電子鍋', description: '電子鍋：原廠模式、全部食譜（含優格）、預約、舒肥外部控溫' });

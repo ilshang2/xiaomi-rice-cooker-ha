@@ -5,9 +5,14 @@
 Turn a cheap smart rice cooker (**Xiaomi Mijia Rice Cooker mini, `chunmi.cooker.tw1`**, the Taiwan model) into a
 customizable low-temperature / sous-vide cooker, with a nice Home Assistant dashboard card.
 
-The cooker exposes **no target-temperature setting** and its app recipes are encoded in an unpublished format.
-So instead of fighting the firmware, Home Assistant watches the pot temperature and **switches the built-in
-"keep warm" mode on and off** (a thermostat built from automations).
+The cooker exposes **no target-temperature setting**, but its recipes are plain 176-byte packets
+(header + heating curve + CRC) that it accepts over the **local network**. This project:
+
+1. **Starts any of the 15 built-in recipes from Home Assistant, including the app-only ones such as yogurt**, with
+   your own duration, scheduled start and auto-keep-warm, without the Xiaomi cloud
+   ([format](docs/recipe-format.md)).
+2. Builds a **sous-vide mode** by watching the pot temperature and switching the built-in "keep warm" mode on
+   and off (a thermostat built from automations).
 
 > **Not affiliated with Xiaomi.** This is a hobby reverse-engineering project. Use at your own risk — read the
 > [safety notes](#safety-and-limits) first.
@@ -28,25 +33,33 @@ So instead of fighting the firmware, Home Assistant watches the pot temperature 
 
 ## What you get
 
-- A custom Lovelace card `custom:cooker-card`: temperature ring, status chip, two-tap confirmation, recipe
-  presets, countdown.
-- **All 6 start modes the cooker accepts over the network**: Fine Cook, Quick Cook, Congee, Keep Warm,
-  *Custom slot* (whatever recipe the Mi Home app put in that slot, name auto-detected), Reheat.
-- **Sous-vide mode (external control)**: any target 30–~75 °C, any time up to 24 h, normal (±1 °C) or quiet
-  (±2.5 °C, ~¼ of the beeps) mode, over-temperature / sensor-loss protection.
-- **Recipe presets** (yogurt, soft-boiled egg, salmon, steak, chicken breast …) and a **two-step baby-porridge
-  recipe**: 55 °C soak, then automatically hand over to the cooker's native congee program.
-- A read-only list of the other Mi Home recipes (with their factory durations) that HA cannot start.
-- [Protocol notes](docs/protocol-notes.md): everything we learned (and failed to learn) about this cooker.
+- A custom Lovelace card `custom:cooker-card` with three tabs: temperature ring, status chip, two-tap
+  confirmation, countdown.
+- **Cook tab**: the 6 start modes (Fine Cook, Quick Cook, Congee, Keep Warm, *Custom slot*, Reheat) and an
+  auto-keep-warm switch.
+- **Recipes tab (new)**: all 11 recipes beyond the basic modes - Stew, **Yogurt**, Baby porridge, Instant
+  noodles, Cake, Simmered soup, Reheat, Oden, Hot rice, Sweet rice, Speed rice - with adjustable cooking time
+  (within the recipe's own limits), **scheduled start** and auto keep warm. The packet is built in the browser
+  and sent locally.
+- **Sous-vide tab (external control)**: any target 30–~75 °C, any time up to 24 h, normal (±1 °C) or quiet
+  (±2.5 °C, ~¼ of the beeps) mode, over-temperature / sensor-loss protection, presets (soft-boiled egg, salmon,
+  steak, chicken breast …) and a two-step baby-porridge recipe (55 °C soak, then the native congee program).
+- [`tools/cookcode.py`](tools/cookcode.py) and [`data/recipes.json`](data/recipes.json): build and send recipe
+  packets from scripts and automations.
+- [Recipe format](docs/recipe-format.md) and [protocol notes](docs/protocol-notes.md): everything we learned
+  (and did not learn) about this cooker.
+
+![Recipes tab](docs/img/card-recipes.png)
 
 ## What does *not* work (and why)
 
-- The other Mi Home recipes (yogurt, baby porridge, instant noodles, cake, soup, oden, hot rice, sweet rice,
-  speed rice) **cannot be started from HA** (except whichever one sits in the Custom slot, and Reheat). The cooker only accepts `start-cook` with parameter 1–6; the app
-  sends an encoded recipe through the Xiaomi cloud which we could not decode. See the notes.
-- Boil-type recipes (cake, instant noodles, rice) heat flat-out to ~100–105 °C. They cannot be imitated by the
-  on/off thermostat, so the card only lists them.
-- Every start/stop makes the cooker **beep**. Quiet mode reduces how often, it cannot silence it.
+- **Custom heating curves.** The curve inside a recipe packet (bytes 20–173) is only partly understood, so only
+  the header (time, schedule, keep-warm) is editable. You can run the 15 built-in recipes, not design new ones.
+  See "What is still unknown" in the [recipe format](docs/recipe-format.md).
+- The Sous-vide tab still works by switching Keep Warm on and off, so every start/stop makes the cooker
+  **beep**. Quiet mode reduces how often, it cannot silence it. (The Recipes tab starts once and does not beep
+  repeatedly.)
+- Boil-type recipes (cake, instant noodles, rice) heat flat-out to ~100–105 °C by design.
 
 ## Requirements
 
@@ -84,7 +97,8 @@ resolution is 1–2 °C with ~30 s polling.
 
 ## Safety and limits
 
-- **Always test with water in the pot, and stay nearby.** Heating is started by software.
+- **Always test with water in the pot, and stay nearby.** Heating is started by software. Sending a recipe from
+  the Recipes tab starts heating immediately.
 - Keep Warm mode heats only to its own plateau (**~73–75 °C measured**). Targets above that are
   **untested and probably unreachable**, although the UI slider allows up to 90 °C.
 - The recipe presets (times and temperatures) are common home sous-vide values. **They are not verified for
@@ -96,10 +110,9 @@ resolution is 1–2 °C with ~30 s polling.
 
 ## A wish for Xiaomi
 
-Most of this project exists because the cooker does not expose a target temperature and its app recipes are
-encoded in a format we cannot read. If Xiaomi ever documents the recipe (`cooking-data`) format, adds a
-target-temperature property, or lets the local API start the other app recipes, this hack could shrink to a
-thin card and we would be very happy to retire the on/off thermostat. Until then, this is the workaround.
+The recipe packet format turned out to be readable, but the heating-curve fields are undocumented and the
+cooker still has no target-temperature property. If Xiaomi documents the curve, or adds a target-temperature
+property, custom recipes and a real thermostat would be easy and we could retire the keep-warm workaround.
 (No pressure, no affiliation. Just a hopeful note from a user who loves the little cooker.)
 
 ## Data

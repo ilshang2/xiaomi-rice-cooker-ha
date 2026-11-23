@@ -14,12 +14,12 @@ MIoT spec: <https://home.miot-spec.com/spec/chunmi.cooker.tw1>
 | 2.1 | cooker status | 1 standby, 2 cooking, 3 keep warm, 4 reserved. HA shows `idle` / `busy` / `keep warm` / `delay` |
 | 2 / aiid 1 | start-cook (param piid 6) | **accepts 1–6 only**, see below |
 | 2 / aiid 2 | cancel | `button.…_cancel_cooking` |
-| 4.15 | cooking-data (string) | format unknown |
+| 4.15 | cooking-data (string) | write-only; 176-byte recipe packet, see [recipe-format.md](recipe-format.md) |
 | 4.16 | bell | **never write** |
 | 4.17 / 4.18 / 4.19 | status / phase / menu | menu is a 20-byte hex header, see below |
 | 4.20 / 4.21 | t-cook (min) / t-left (s) | |
 | 4.30 | temp (°C) | 1–2 °C resolution; with local polling ~30 s |
-| 4 / aiid 1, 3 | set-start, set-menu (cooking-data) | return code 0 but **silently ignored** for every string we tried |
+| 4 / aiid 1, 3 | set-start, set-menu (cooking-data) | **works** with a valid 176-byte packet (header + curve + CRC16/XMODEM); anything shorter/invalid returns 0 but is silently ignored |
 | 4 / aiid 4 | set-factory-reset | **do not call** |
 
 There is **no target-temperature property** anywhere in the spec.
@@ -70,19 +70,17 @@ See `../data/` for the raw cake and noodle samples.
 
 ## What we tried and could not crack
 
-- **App recipe encoding.** The Mi Home app talks to the cooker via the Xiaomi cloud
-  (the cooker opens a TLS connection to a cloud host, bursts of 12–15 KB at start/stop). On the LAN the
-  only visible traffic is the miIO discovery/poll on UDP 54321.
-- `adb logcat` on the phone: nothing useful. `mitmproxy` with a user-installed CA: the app (and others) reject it.
-  We stopped there; a rooted device with a system CA or patched APK is the remaining route.
-- Writing arbitrary `cooking-data` through `set-start` / `set-menu`: accepted, ignored. The old
-  python-miio `set_start` profile format (hex strings for the normal/press cookers) does not apply to this model.
+- **App recipe encoding: solved** (see [recipe-format.md](recipe-format.md)). It was found with a Frida hook on a
+  rooted phone running Mi Home; the cooker's own plugin names every header field. Early attempts were ignored
+  only because they had no heating curve.
+- The **heating curve** bytes are still only partly understood.
+- `mitmproxy` with a user-installed CA is rejected by the app; `adb logcat` shows nothing useful.
 - The Xiaomi cloud API returns 403 for this device; we did not try to get around it.
 - Hardware offload on a MikroTik router hides traffic between devices on the same bridge port, so LAN sniffing
   needs the phone and the cooker on different ports.
 
 ## Ideas for contributors
 
-- Capture a real app start with a rooted phone / system CA and decode `cooking-data`.
+- Decode the heating-curve records (see "What is still unknown" in [recipe-format.md](recipe-format.md)).
 - Test other firmware / models (`chunmi.cooker.*`) for additional `start-cook` parameters.
 - A cleaner sous-vide approach (PWM on keep warm?) and a verified upper temperature limit.
