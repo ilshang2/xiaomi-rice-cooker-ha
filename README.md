@@ -23,7 +23,7 @@ The cooker exposes **no target-temperature setting**, but its recipes are plain 
 <img src="docs/img/card-recipes.png" width="23%"> <img src="docs/img/card-custom.png" width="23%">
 </p>
 
-*Screenshots are rendered from the real card; the “running” state uses sample values. The demo video below shows the earlier relay-based Sous-vide tab, which has since been removed in favour of the Custom tab.*
+*Screenshots are rendered from the real card; the “running” state uses sample values. The demo video below shows the earlier relay-based Sous-vide tab, which has since been removed in favour of the Sous-vide tab.*
 
 ![Demo animation](docs/demo.gif)
 
@@ -33,7 +33,7 @@ The cooker exposes **no target-temperature setting**, but its recipes are plain 
 
 ## What you get
 
-- A custom Lovelace card `custom:cooker-card` with four tabs: temperature ring, status chip, two-tap
+- A custom Lovelace card `custom:cooker-card` with three tabs: temperature ring, status chip, two-tap
   confirmation, countdown.
 - **Cook tab**: the 6 start modes (Fine Cook, Quick Cook, Congee, Keep Warm, *Custom slot*, Reheat) and an
   auto-keep-warm switch.
@@ -41,7 +41,7 @@ The cooker exposes **no target-temperature setting**, but its recipes are plain 
   noodles, Cake, Simmered soup, Reheat, Oden, Hot rice, Sweet rice, Speed rice - with adjustable cooking time
   (within the recipe's own limits), **scheduled start** and auto keep warm; yogurt also has an experimental
   **fermentation temperature** (30–50 °C). The packet is built in the browser and sent locally.
-- **Custom tab (new)**: design your own recipe: pick a target temperature (30–90 °C), a time and a power level
+- **Sous-vide tab (new)**: design your own recipe: pick a target temperature (30–90 °C), a time and a power level
   per step, up to 8 steps (presets: onsen egg, chicken breast, steak, salmon, yogurt, slow stew, soak-then-cook).
   One step is sent as a single packet (the cooker thermostats itself, no beeping); several steps run through
   `script.cooker_program` ([`ha/cooker_program.script.json`](ha/cooker_program.script.json)), which cancels, waits
@@ -53,13 +53,13 @@ The cooker exposes **no target-temperature setting**, but its recipes are plain 
 - [Recipe format](docs/recipe-format.md) and [protocol notes](docs/protocol-notes.md): everything we learned
   (and did not learn) about this cooker.
 
-![Recipes tab](docs/img/card-recipes.png) ![Custom tab](docs/img/card-custom.png)
+![Recipes tab](docs/img/card-recipes.png) ![Sous-vide tab](docs/img/card-custom.png)
 
 ## What does *not* work (and why)
 
 - **Fully free heating curves.** Only two fields of a curve phase are decoded (target temperature and power;
   see [recipe format](docs/recipe-format.md)). The cooker's firmware still decides the phase flow of each recipe
-  id, so the **Custom tab** builds constant-temperature holds (and chains of them), not arbitrary ramps.
+  id, so the **Sous-vide tab** builds constant-temperature holds (and chains of them), not arbitrary ramps.
 - Boil-type recipes (cake, instant noodles, rice) heat flat-out to ~100–105 °C by design.
 
 ## Requirements

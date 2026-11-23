@@ -55,7 +55,7 @@ function buildHold(temp, min, power) {
 }
 const HOLD_PRESETS = [ // [名稱, [[°C, 分鐘], …]]
   ['溫泉蛋', [[65, 60]]], ['雞胸', [[62, 90]]], ['牛排', [[55, 90]]], ['鮭魚', [[50, 40]]],
-  ['豬里肌', [[62, 120]]], ['軟嫩雞腿', [[68, 120]]], ['優格', [[42, 480]]], ['低溫優格', [[38, 480]]], ['慢燉', [[85, 240]]], ['兩段：吸水再煮', [[55, 30], [85, 30]]],
+  ['豬里肌', [[62, 120]]], ['軟嫩雞腿', [[68, 120]]], ['優格', [[42, 480]]], ['低溫優格', [[38, 480]]], ['慢燉', [[85, 240]]], ['多段', [[55, 30], [85, 30]]],
 ];
 const POWERS = [[16, '溫和'], [32, '標準']];
 function recipeInfo(id) {
@@ -219,7 +219,7 @@ class CookerCard extends HTMLElement {
         <circle cx="100" cy="100" r="${R}" fill="none" stroke="var(--acc)" stroke-width="14" stroke-linecap="round" stroke-dasharray="${arc * frac} ${C}"/>
       </svg><div class="c"><div class="big">${st === 'unavailable' ? '--' : temp}<small>°C</small></div><div class="sub">${sub}</div></div></div>
       ${remain != null ? `<div class="bar"><i style="width:${pct}%"></i></div>` : '<div style="height:12px"></div>'}
-      <div class="seg"><button data-a="tab" data-v="cook" class="${tab === 'cook' ? 'on' : ''}">烹飪</button><button data-a="tab" data-v="rc" class="${tab === 'rc' ? 'on' : ''}">食譜</button><button data-a="tab" data-v="cs" class="${tab === 'cs' ? 'on' : ''}">自訂</button></div>
+      <div class="seg"><button data-a="tab" data-v="cook" class="${tab === 'cook' ? 'on' : ''}">烹飪</button><button data-a="tab" data-v="rc" class="${tab === 'rc' ? 'on' : ''}">食譜</button><button data-a="tab" data-v="cs" class="${tab === 'cs' ? 'on' : ''}">舒肥</button></div>
       ${tab === 'cook' ? panelCook : tab === 'rc' ? panelRc : panelCs}
     </ha-card>`;
     this.shadowRoot.querySelectorAll('[data-a]').forEach((b) => b.addEventListener('click', () => this._act(b.dataset.a, b.dataset.v)));
