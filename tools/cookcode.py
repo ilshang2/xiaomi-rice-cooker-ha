@@ -5,6 +5,7 @@
   python cookcode.py show 優格                  # 解析表頭
   python cookcode.py hex 優格 --minutes 300     # 改時長後輸出新封包（自動重算 CRC）
   python cookcode.py hex 優格 --phase 1 --target 45 --power 16   # 實驗：改階段 1 目標溫度與功率
+  python cookcode.py hold --hold 65 --minutes 90                  # 自訂恆溫食譜：65 °C 90 分鐘
 送給電鍋（HA）：xiaomi_miot.call_action  entity_id=<電鍋實體> siid=4 aiid=1 params=["<hex>"]
 """
 import json,sys,argparse,pathlib
@@ -48,14 +49,28 @@ def set_phase(b, phase, target_c=None, power=None):
         if not 0 <= power <= 0x40: raise ValueError("power must be 0-64")
         b[o + 4] = int(power)
     return fix_crc(b)
+def hold_packet(target_c, minutes, power=32, template='優格'):
+    """自訂恆溫食譜：用優格的流程（階段 1＝恆溫保持）做成「以 power 功率控制在 target_c °C、共 minutes 分鐘」。
+    階段 1 與階段 8 的目標溫度、功率一起設，避免流程換階段時溫度掉回優格的 40 °C。
+    範圍：目標 30–90 °C、1–1440 分鐘、功率 8–64。電鍋自己控溫，時間到自己停（不自動保溫）。"""
+    if not 30 <= target_c <= 90: raise ValueError("target must be 30-90 C")
+    if not 1 <= minutes <= 1440: raise ValueError("minutes must be 1-1440")
+    if not 8 <= power <= 0x40: raise ValueError("power must be 8-64")
+    b = load()[template]
+    start_index(b); set_minutes(b, minutes); set_auto_keep_warm(b, False)
+    set_phase(b, 1, target_c=target_c, power=power)
+    set_phase(b, 8, target_c=target_c, power=power)
+    return b
 def start_index(b):
     """App 的做法：menu id > 4 的食譜立即開始用 index 05（存入收藏用 04）；模式 1–4 保留原值。"""
     if int.from_bytes(b[3:7],'big')>4: b[2]=0x05
     return fix_crc(b)
 if __name__=='__main__':
-    ap=argparse.ArgumentParser(); ap.add_argument('cmd'); ap.add_argument('name',nargs='?'); ap.add_argument('--minutes',type=int); ap.add_argument('--order',type=int); ap.add_argument('--keep-warm',choices=['on','off']); ap.add_argument('--phase',type=int); ap.add_argument('--target',type=int); ap.add_argument('--power',type=int)
+    ap=argparse.ArgumentParser(); ap.add_argument('cmd'); ap.add_argument('name',nargs='?'); ap.add_argument('--minutes',type=int); ap.add_argument('--order',type=int); ap.add_argument('--keep-warm',choices=['on','off']); ap.add_argument('--phase',type=int); ap.add_argument('--hold',type=int,help='自訂恆溫：目標 °C（搭配 --minutes、--power）'); ap.add_argument('--target',type=int); ap.add_argument('--power',type=int)
     a=ap.parse_args(); R=load()
     if a.cmd=='list': print('\n'.join(f'{b[6]:02x} {n}' for n,b in R.items()))
+    elif a.cmd=='hold':
+        b=hold_packet(a.hold,a.minutes or 60,a.power or 32); print(b.hex())
     else:
         b=R[a.name]
         start_index(b)

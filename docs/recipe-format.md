@@ -109,6 +109,18 @@ is stable first, and compare trends, not single readings. Read it live with `xia
 clamped to 30-95 C and power <= 0x40. **This is experimental**: it only edits two fields of a curve we do not
 fully understand. Watch the first run, with water in the pot.
 
+## Custom constant-temperature recipes
+
+The yogurt flow keeps a constant temperature, so it is the base for custom holds: phase 1 (record at byte 33,
+`b2` at 35, `b4` at 37) and phase 8 (record at byte 82, `b2` at 84, `b4` at 86) are set to the same target and
+power, the header time is the hold time, and the schedule and auto-keep-warm bits are cleared.
+`python tools/cookcode.py hold --hold 65 --minutes 90` builds one (30-90 C, 1-1440 min, power 8-64).
+
+Long run (yogurt flow, target 75 C): **phase 1 lasts about 30 min, then the cooker moves on to phase 8**. If phase 8
+keeps its default 40 C target, the pot cools down (77 -> 63 C over 60 min), which is why both records are set (holding the target in phase 8 was not observed in a long run).
+Chaining several holds is done by the card / `script.cooker_program`: cancel, wait for idle, send the next packet
+(a packet sent while the cooker is busy is ignored). Verified on a real cooker with a 2 x 2 min program (50 C then 60 C).
+
 ## Legal / ethics
 
 Interoperability research on a device the author owns. The packets in `data/recipes.json` are the recipe data

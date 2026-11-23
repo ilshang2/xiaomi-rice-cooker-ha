@@ -1,0 +1,105 @@
+{
+ "alias": "電鍋程式（多段恆溫）",
+ "icon": "mdi:pot-steam-outline",
+ "description": "依序執行多段恆溫食譜。packets＝每段的食譜封包（十六進位字串）、minutes＝每段分鐘數。每段封包的表頭時間等於該段分鐘數，所以 HA 當機時電鍋也會在該段結束時自己停止。",
+ "mode": "single",
+ "fields": {
+  "packets": {
+   "name": "封包",
+   "description": "每段的 176 位元組食譜封包",
+   "required": true,
+   "selector": {
+    "object": {}
+   }
+  },
+  "minutes": {
+   "name": "分鐘",
+   "description": "每段分鐘數",
+   "required": true,
+   "selector": {
+    "object": {}
+   }
+  }
+ },
+ "sequence": [
+  {
+   "action": "input_number.set_value",
+   "target": {
+    "entity_id": "input_number.cooker_prog_total"
+   },
+   "data": {
+    "value": "{{ packets | length }}"
+   }
+  },
+  {
+   "repeat": {
+    "for_each": "{{ range(packets | length) | list }}",
+    "sequence": [
+     {
+      "action": "input_number.set_value",
+      "target": {
+       "entity_id": "input_number.cooker_prog_step"
+      },
+      "data": {
+       "value": "{{ repeat.item + 1 }}"
+      }
+     },
+     {
+      "action": "button.press",
+      "target": {
+       "entity_id": "button.chunmi_tw1_c3d7_cancel_cooking"
+      }
+     },
+     {
+      "wait_template": "{{ is_state('sensor.chunmi_tw1_c3d7_cooker', 'idle') }}",
+      "timeout": "00:01:00",
+      "continue_on_timeout": true
+     },
+     {
+      "delay": "00:00:03"
+     },
+     {
+      "action": "xiaomi_miot.call_action",
+      "data": {
+       "entity_id": "sensor.chunmi_tw1_c3d7_cooker",
+       "siid": 4,
+       "aiid": 1,
+       "params": [
+        "{{ packets[repeat.item] }}"
+       ]
+      }
+     },
+     {
+      "action": "input_datetime.set_datetime",
+      "target": {
+       "entity_id": "input_datetime.cooker_prog_end"
+      },
+      "data": {
+       "timestamp": "{{ as_timestamp(now()) + (minutes[repeat.item] | int) * 60 }}"
+      }
+     },
+     {
+      "delay": {
+       "minutes": "{{ minutes[repeat.item] | int }}"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "action": "button.press",
+   "target": {
+    "entity_id": "button.chunmi_tw1_c3d7_cancel_cooking"
+   }
+  },
+  {
+   "action": "input_number.set_value",
+   "target": {
+    "entity_id": "input_number.cooker_prog_step"
+   },
+   "data": {
+    "value": 0
+   }
+  }
+ ]
+}

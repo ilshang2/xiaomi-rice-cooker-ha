@@ -1,40 +1,25 @@
 # Helpers required by the card and automations (add to configuration.yaml or create in the UI
 # with the same entity IDs).  卡片與自動化需要的輔助實體。
 input_number:
-  sousvide_target:
-    name: Sous-vide target
-    min: 30
-    max: 90          # in practice keep-warm heating plateaus near 73-75 C; see docs
-    step: 0.5
-    unit_of_measurement: "°C"
+  cooker_prog_step:       # multi-step program: current step
+    name: Cooker program step
+    min: 0
+    max: 20
+    step: 1
     mode: box
-    initial: 60
-    icon: mdi:thermometer
-  sousvide_minutes:
-    name: Sous-vide minutes
-    min: 10
-    max: 1440
-    step: 5
-    unit_of_measurement: min
+  cooker_prog_total:      # multi-step program: number of steps
+    name: Cooker program steps
+    min: 0
+    max: 20
+    step: 1
     mode: box
-    initial: 120
-    icon: mdi:timer-outline
 input_boolean:
-  sousvide_run:
-    name: Sous-vide run
-    icon: mdi:pot-steam
-  sousvide_quiet:
-    name: Sous-vide quiet mode
-    icon: mdi:volume-off
-  sousvide_then_porridge:
-    name: Start native porridge mode after sous-vide
-    icon: mdi:bowl-mix
   cooker_slot5_pending:
     name: Cooker custom slot pending
     icon: mdi:clock-outline
 input_datetime:
-  sousvide_end:
-    name: Sous-vide end
+  cooker_prog_end:        # end of the current program step
+    name: Cooker program step end
     has_date: true
     has_time: true
     icon: mdi:clock-end

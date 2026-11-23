@@ -1,13 +1,12 @@
-/* 米家電子鍋 mini 專用卡片（含舒肥外部控溫）。無外部相依，純 Web Component。
+/* 米家電子鍋 mini 專用卡片（原廠模式、全部食譜、自訂恆溫／多段程式）。無外部相依，純 Web Component。
  * 實體寫死為這台電鍋；詳見 cooker/README.md */
 const E = {
   cooker: 'sensor.chunmi_tw1_c3d7_cooker', temp: 'sensor.chunmi_tw1_c3d7_temp',
   left: 'sensor.chunmi_tw1_c3d7_t_left', cook: 'sensor.chunmi_tw1_c3d7_t_cook',
   akw: 'switch.chunmi_tw1_c3d7_auto_keep_warm', sel: 'select.chunmi_tw1_c3d7_start_cook',
   cancel: 'button.chunmi_tw1_c3d7_cancel_cooking',
-  target: 'input_number.sousvide_target', mins: 'input_number.sousvide_minutes',
   menu: 'sensor.chunmi_tw1_c3d7_menu', slot: 'input_text.cooker_slot5', pending: 'input_boolean.cooker_slot5_pending',
-  quiet: 'input_boolean.sousvide_quiet', chain: 'input_boolean.sousvide_then_porridge', run: 'input_boolean.sousvide_run', end: 'input_datetime.sousvide_end',
+  prog: 'script.cooker_program', pstep: 'input_number.cooker_prog_step', ptotal: 'input_number.cooker_prog_total', pend: 'input_datetime.cooker_prog_end',
 };
 const MODES = [ // [start-cook 參數, 名稱, 圖示]；7–15 電鍋會拒絕
   [1, '精煮飯', 'mdi:creation'], [2, '快煮飯', 'mdi:lightning-bolt'],
@@ -15,8 +14,6 @@ const MODES = [ // [start-cook 參數, 名稱, 圖示]；7–15 電鍋會拒絕
   [5, '自選', 'mdi:star-circle-outline'], [6, '再加熱', 'mdi:rice'],
 ];
 const RECIPES = { '06': '優格', '07': '嬰兒粥', '08': '泡麵', '09': '蛋糕', '0a': '煲湯', '0b': '再加熱', '0c': '關東煮', '0d': '熱米飯', '0e': '香甜煮', '0f': '極速煮' };
-// 舒肥食譜：[名稱, 溫度°C, 分鐘, 結束後接原廠煮粥?]（一般經驗值，可再用下方微調）
-const SV_RECIPES = [['嬰兒粥（吸水＋煮粥）', 55, 30, true], ['優格', 42, 480], ['低溫優格', 38, 480], ['溫泉蛋', 65, 60], ['鮭魚', 50, 40], ['牛排', 55, 90], ['雞胸', 62, 90], ['豬里肌', 62, 120], ['軟嫩雞腿', 68, 120]];
 const PK = { // 食譜封包（id → [名稱, 176 位元組十六進位]），來源見 cooker/docs/cookcode-format.md
   '01': ['精煮飯', '02010000000001e101000000000000800100000000000000002091827d7800050091822d781c080091823c781c280091ff857820ffff91828578000700ffff8578ffffff91828578000d00ff828778ff000091827d7800000091827d7800ffff91826078ff01114b02667d0801086b0078090301f75602667d09010a6d00780a02025a5701667d0e010a71007a0c02ffff5701667d10010a72007d0c03200502030a0000000000000000000000000c43'],
   '02': ['快煮飯', '02010100000002e10028000000000080010000000000000000209182827800000091823c7820000091823c781c280091ff857820ffff91828578000600ffff8578ffffff91828578000d00ff828778ff000082827d7800000091827d7800ffff91826078ff015f4b03667d08010a6b0074070302465602667d09010a6d0076080302915701667d0f010a7100780803ffff5701667d11010a72007b0803200502030a00000000000000000000000001bb'],
@@ -48,12 +45,23 @@ function buildPacket(id, min, order, akw, temp) {
   const c = crc16(b.subarray(0, 174)); b[174] = c >> 8; b[175] = c & 0xFF;
   return b2hex(b);
 }
+// 自訂恆溫食譜：用優格流程（階段 1＝恆溫保持），目標溫度 b2、功率 b4；階段 8 一併設定，避免換階段後掉回 40 °C
+function buildHold(temp, min, power) {
+  const b = hex2b(PK['06'][1]);
+  b[2] = 0x05; b[8] = Math.floor(min / 60) & 0xFF; b[9] = min % 60; b[14] = 0; b[15] &= 0x7F;
+  b[35] = temp; b[37] = power; b[84] = temp; b[86] = power;
+  const c = crc16(b.subarray(0, 174)); b[174] = c >> 8; b[175] = c & 0xFF;
+  return b2hex(b);
+}
+const HOLD_PRESETS = [ // [名稱, [[°C, 分鐘], …]]
+  ['溫泉蛋', [[65, 60]]], ['雞胸', [[62, 90]]], ['牛排', [[55, 90]]], ['鮭魚', [[50, 40]]],
+  ['豬里肌', [[62, 120]]], ['軟嫩雞腿', [[68, 120]]], ['優格', [[42, 480]]], ['低溫優格', [[38, 480]]], ['慢燉', [[85, 240]]], ['兩段：吸水再煮', [[55, 30], [85, 30]]],
+];
+const POWERS = [[16, '溫和'], [32, '標準']];
 function recipeInfo(id) {
   const b = hex2b(PK[id][1]);
   return { name: PK[id][0], def: b[8] * 60 + b[9], max: b[10] * 60 + b[11], min: b[12] * 60 + b[13], canOrder: !!(b[7] & 0x40), canAkw: !!(b[7] & 0x20), akw: !!(b[15] & 0x80), temp: id === '06' ? b[84] : 0 };
 }
-const TEMP_PRESETS = [50, 55, 60, 65, 70, 75];
-const TIME_PRESETS = [[30, '30 分'], [60, '1 時'], [120, '2 時'], [240, '4 時'], [480, '8 時'], [720, '12 時']];
 const STATE_TEXT = { idle: '待機', busy: '烹飪中', 'keep warm': '保溫中', delay: '預約中' };
 
 const css = `
@@ -108,14 +116,14 @@ ha-card { padding:16px; --acc: var(--primary-color); overflow:hidden; }
 `;
 
 class CookerCard extends HTMLElement {
-  setConfig() { this._tab = null; this._ask = null; this._sig = ''; this._rc = null; }
+  setConfig() { this._tab = null; this._ask = null; this._sig = ''; this._rc = null; this._cs = { steps: [[65, 60]], power: 32 }; }
   getCardSize() { return 9; }
   connectedCallback() { if (!this.shadowRoot) { this.attachShadow({ mode: 'open' }); } }
   set hass(h) {
     this._h = h;
     if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
     const s = (e) => (h.states[e] ? h.states[e].state : 'na');
-    const sig = Object.values(E).map(s).join('|') + '|' + this._tab + '|' + JSON.stringify(this._rc) + '|' + this._ask + '|' + Math.floor(Date.now() / 60000);
+    const sig = Object.values(E).map(s).join('|') + '|' + this._tab + '|' + JSON.stringify(this._rc) + '|' + JSON.stringify(this._cs) + '|' + this._ask + '|' + Math.floor(Date.now() / 60000);
     if (sig === this._sig) return;
     this._sig = sig; this._render();
   }
@@ -131,9 +139,22 @@ class CookerCard extends HTMLElement {
     this._sig = ''; this._render(); return false;
   }
   _act(a, v) {
-    const tgt = this._n(E.target, 60), mins = this._n(E.mins, 120);
     if (a === 'tab') { this._tab = v; }
     else if (a === 'mode') { if (this._confirm('mode' + v)) { if (+v === 5) this._call('input_boolean', 'turn_on', { entity_id: E.pending }); this._call('xiaomi_miot', 'call_action', { entity_id: E.cooker, siid: 2, aiid: 1, params: [+v] }); } return; }
+    else if (a === 'csel') { const x = HOLD_PRESETS[+v]; if (x) this._cs.steps = x[1].map((q) => q.slice()); }
+    else if (a === 'cadd') { if (this._cs.steps.length < 8) { const l = this._cs.steps[this._cs.steps.length - 1] || [60, 60]; this._cs.steps.push(l.slice()); } }
+    else if (a === 'cdel') { if (this._cs.steps.length > 1) this._cs.steps.splice(+v, 1); }
+    else if (a === 'ct') { const [i, d] = v.split(','); const q = this._cs.steps[+i]; q[0] = Math.min(90, Math.max(30, q[0] + +d)); }
+    else if (a === 'cm') { const [i, d] = v.split(','); const q = this._cs.steps[+i]; q[1] = Math.min(1440, Math.max(10, q[1] + +d)); }
+    else if (a === 'cp') this._cs.power = +v;
+    else if (a === 'cgo') {
+      const st = this._cs.steps, pw = this._cs.power;
+      if (this._confirm('cgo')) {
+        if (st.length === 1) this._call('xiaomi_miot', 'call_action', { entity_id: E.cooker, siid: 4, aiid: 1, params: [buildHold(st[0][0], st[0][1], pw)] });
+        else this._call('script', 'cooker_program', { packets: st.map(([t, m]) => buildHold(t, m, pw)), minutes: st.map(([, m]) => m) });
+      } return;
+    }
+    else if (a === 'cstop') { if (this._confirm('cstop')) { this._call('script', 'turn_off', { entity_id: E.prog }); this._call('button', 'press', { entity_id: E.cancel }); this._call('input_number', 'set_value', { entity_id: E.pstep, value: 0 }); } return; }
     else if (a === 'rcsel') { const i = recipeInfo(v); this._rc = { id: v, min: i.def, order: 0, akw: i.akw, temp: i.temp }; }
     else if (a === 'rcmin') { const i = recipeInfo(this._rc.id); if (i.max > i.min) this._rc.min = Math.min(i.max, Math.max(i.min, this._rc.min + +v)); }
     else if (a === 'rcord') { this._rc.order = Math.min(23 * 60 + 30, Math.max(0, this._rc.order + +v)); }
@@ -142,37 +163,26 @@ class CookerCard extends HTMLElement {
     else if (a === 'rcgo') { const r = this._rc; if (r && this._confirm('rcgo')) { this._call('xiaomi_miot', 'call_action', { entity_id: E.cooker, siid: 4, aiid: 1, params: [buildPacket(r.id, r.min, r.order, r.akw, r.temp)] }); } return; }
     else if (a === 'cancel') { if (this._confirm('cancel')) this._call('button', 'press', { entity_id: E.cancel }); return; }
     else if (a === 'akw') this._call('switch', 'toggle', { entity_id: E.akw });
-    else if (a === 'chain') this._call('input_boolean', 'toggle', { entity_id: E.chain });
-    else if (a === 'quiet') this._call('input_boolean', 'toggle', { entity_id: E.quiet });
-    else if (a === 'tset') this._call('input_number', 'set_value', { entity_id: E.target, value: Math.min(90, Math.max(30, +v)) });
-    else if (a === 'tstep') this._call('input_number', 'set_value', { entity_id: E.target, value: Math.min(90, Math.max(30, tgt + +v)) });
-    else if (a === 'recipe') { const r = SV_RECIPES[+v]; if (r) { this._call('input_boolean', r[3] ? 'turn_on' : 'turn_off', { entity_id: E.chain }); this._call('input_number', 'set_value', { entity_id: E.target, value: r[1] }); this._call('input_number', 'set_value', { entity_id: E.mins, value: r[2] }); } }
-    else if (a === 'mset') this._call('input_number', 'set_value', { entity_id: E.mins, value: +v });
-    else if (a === 'mstep') this._call('input_number', 'set_value', { entity_id: E.mins, value: Math.min(1440, Math.max(10, mins + +v)) });
-    else if (a === 'run') { if (this._s(E.run) === 'on') { this._call('input_boolean', 'turn_off', { entity_id: E.run }); }
-      else if (this._confirm('run')) this._call('input_boolean', 'turn_on', { entity_id: E.run }); return; }
     this._sig = ''; this._render();
   }
   _render() {
-    const st = this._s(E.cooker), sv = this._s(E.run) === 'on', idle = st === 'idle';
-    const temp = this._n(E.temp), tgt = this._n(E.target, 60), mins = this._n(E.mins, 120), quiet = this._s(E.quiet) === 'on', chain = this._s(E.chain) === 'on';
-    const tab = this._tab || (sv ? 'sv' : 'cook');
+    const st = this._s(E.cooker), idle = st === 'idle';
+    const temp = this._n(E.temp);
+    const tab = this._tab || (this._s(E.prog) === 'on' ? 'cs' : 'cook');
     const left = this._n(E.left), total = this._n(E.cook) * 60;
     let remain = null, pct = 0;
-    if (sv) { const e = new Date(this._s(E.end).replace(' ', 'T')); if (!isNaN(e)) { remain = (e - new Date()) / 1000; pct = Math.min(100, Math.max(0, 100 * (1 - remain / (mins * 60)))); } }
-    else if (st === 'busy' && total) { remain = left; pct = 100 * (1 - left / total); }
+    if (st === 'busy' && total) { remain = left; pct = 100 * (1 - left / total); }
     const hdr = this._s(E.menu).replace(/"/g, ''), rname = RECIPES[hdr.slice(-2)] || (hdr.startsWith('0303') && hdr.slice(-2) === '04' ? '保溫' : '');
-    const label = sv ? '舒肥中' : (STATE_TEXT[st] || (st === 'unavailable' ? '離線' : st)) + (st === 'busy' && rname ? ' · ' + rname : '');
+    const label = (STATE_TEXT[st] || (st === 'unavailable' ? '離線' : st)) + (st === 'busy' && rname ? ' · ' + rname : '');
     const slotName = this._s(E.slot); const slotTxt = slotName && !['unknown', 'unavailable', ''].includes(slotName) ? '自選：' + slotName : '自選';
-    const acc = st === 'unavailable' ? '#9e9e9e' : sv ? '#16a085' : st === 'busy' ? '#ef6c00' : st === 'keep warm' ? '#f4a100' : st === 'delay' ? '#7e57c2' : 'var(--primary-color)';
+    const acc = st === 'unavailable' ? '#9e9e9e' : st === 'busy' ? '#ef6c00' : st === 'keep warm' ? '#f4a100' : st === 'delay' ? '#7e57c2' : 'var(--primary-color)';
     // 溫度環：270° 弧，0–100°C
     const R = 90, C = 2 * Math.PI * R, arc = C * 0.75, frac = Math.min(1, Math.max(0, temp / 100));
-    const ang = (270 * (tgt / 100)) * Math.PI / 180, tx = 100 + R * Math.cos(ang), ty = 100 + R * Math.sin(ang);
-    const sub = sv ? `目標 ${tgt}°C · 剩 ${remain != null ? this._fmt(remain) : '--'}` : remain != null && st === 'busy' ? `剩 ${this._fmt(remain)}` : st === 'keep warm' ? `已保溫 ${this._fmt(left)}` : '內鍋溫度';
+    const sub = remain != null && st === 'busy' ? `剩 ${this._fmt(remain)}` : st === 'keep warm' ? `已保溫 ${this._fmt(left)}` : '內鍋溫度';
     const ask = this._ask;
     const panelCook = `
       <div class="grid">${MODES.map(([o, n, i]) => `<button class="mode ${ask === 'mode' + o ? 'ask' : ''}" data-a="mode" data-v="${o}" ${idle ? '' : 'disabled style="opacity:.4"'}><ha-icon icon="${i}"></ha-icon>${ask === 'mode' + o ? '再按一次確認' : (o === 5 ? slotTxt : n)}</button>`).join('')}</div>
-      ${!idle && !sv ? `<button class="go ${ask === 'cancel' ? 'ask' : 'stop'}" data-a="cancel">${ask === 'cancel' ? '再按一次確認停止' : '停止烹飪'}</button>` : ''}
+      ${!idle ? `<button class="go ${ask === 'cancel' ? 'ask' : 'stop'}" data-a="cancel">${ask === 'cancel' ? '再按一次確認停止' : '停止烹飪'}</button>` : ''}
       <div class="tog"><div>煮好自動保溫<small>煮飯完成後自動進入保溫</small></div><button class="sw ${this._s(E.akw) === 'on' ? 'on' : ''}" data-a="akw"></button></div>
       <div class="note">開始前請確認內鍋已放好食材</div>`;
     const rc = this._rc || (this._rc = { id: '06', min: recipeInfo('06').def, order: 0, akw: recipeInfo('06').akw, temp: recipeInfo('06').temp }), ri = recipeInfo(rc.id), adj = ri.max > ri.min;
@@ -184,32 +194,37 @@ class CookerCard extends HTMLElement {
       ${ri.canAkw ? `<div class="tog"><div>煮好自動保溫<small>完成後保溫 24 小時</small></div><button class="sw ${rc.akw ? 'on' : ''}" data-a="rcakw"></button></div>` : ''}
       <button class="go ${ask === 'rcgo' ? 'ask' : ''}" data-a="rcgo" ${idle ? '' : 'disabled'}>${!idle ? '電鍋使用中' : ask === 'rcgo' ? '再按一次：確認內鍋已放好食材' : (rc.order ? '預約 ' : '開始 ') + ri.name}</button>
       <div class="note">本地直接送出食譜封包，不經過米家雲端</div>`;
-    const panelSv = `
-      <div class="row"><span class="l">食譜</span></div>
-      <div class="chips">${SV_RECIPES.map(([n, t, m, ch], i) => `<button data-a="recipe" data-v="${i}" class="${tgt === t && mins === m && !!ch === chain ? 'on' : ''}" ${sv ? 'disabled' : ''}>${n}</button>`).join('')}</div>
-      <div class="row"><span class="l">目標溫度</span><button class="step" data-a="tstep" data-v="-0.5" ${tgt <= 30 ? 'disabled' : ''}>−</button><span class="v">${tgt}°C</span><button class="step" data-a="tstep" data-v="0.5" ${tgt >= 90 ? 'disabled' : ''}>＋</button></div>
-      <div class="chips">${TEMP_PRESETS.map((t) => `<button data-a="tset" data-v="${t}" class="${tgt === t ? 'on' : ''}">${t}°</button>`).join('')}</div>
-      <div class="row"><span class="l">時間</span><button class="step" data-a="mstep" data-v="-15" ${sv ? 'disabled' : ''}>−</button><span class="v" style="font-size:18px">${this._dur(mins)}</span><button class="step" data-a="mstep" data-v="15" ${sv ? 'disabled' : ''}>＋</button></div>
-      <div class="chips">${TIME_PRESETS.map(([m, n]) => `<button data-a="mset" data-v="${m}" class="${mins === m ? 'on' : ''}" ${sv ? 'disabled' : ''}>${n}</button>`).join('')}</div>
-      <div class="tog"><div>結束後接原廠煮粥<small>舒肥時間到，自動啟動原廠「煮粥」模式（煮滾、微滾、保溫交給它）</small></div><button class="sw ${chain ? 'on' : ''}" data-a="chain" ${sv ? 'disabled' : ''}></button></div>
-      <div class="tog"><div>安靜模式<small>提示音少約 3/4，溫度較不準（約 ±2.5°C）</small></div><button class="sw ${quiet ? 'on' : ''}" data-a="quiet"></button></div>
-      <button class="go ${sv ? 'stop' : ask === 'run' ? 'ask' : ''}" data-a="run" ${!sv && !idle ? 'disabled' : ''}>${sv ? '停止舒肥' : ask === 'run' ? '再按一次：確認內鍋已放水／食材' : !idle ? '電鍋使用中' : '開始舒肥'}</button>
-      <div class="note">${sv ? '預計 ' + this._s(E.end).slice(5, 16) + ' 結束；結束後自動停止加熱' : '用保溫模式反覆開關控溫，每次開關電鍋會響'}</div>`;
+    const cs = this._cs, prog = this._s(E.prog) === 'on', pstep = this._n(E.pstep), ptotal = this._n(E.ptotal);
+    const pend = new Date(this._s(E.pend).replace(' ', 'T')), pendTxt = isNaN(pend) ? '' : pend.toTimeString().slice(0, 5);
+    const panelCs = `
+      <div class="chips">${HOLD_PRESETS.map(([n], i) => `<button data-a="csel" data-v="${i}" ${prog ? 'disabled' : ''}>${n}</button>`).join('')}</div>
+      ${cs.steps.map(([t, m], i) => `
+        <div class="row" style="margin-top:14px"><span class="l">第 ${i + 1} 段</span>
+          <button class="step" data-a="ct" data-v="${i},-1" ${prog || t <= 30 ? 'disabled' : ''}>−</button><span class="v" style="min-width:70px">${t}°C</span><button class="step" data-a="ct" data-v="${i},1" ${prog || t >= 90 ? 'disabled' : ''}>＋</button>
+          ${cs.steps.length > 1 ? `<button class="step" data-a="cdel" data-v="${i}" ${prog ? 'disabled' : ''} style="font-size:16px">✕</button>` : ''}</div>
+        <div class="row" style="margin:2px 0"><span class="l">　時間</span>
+          <button class="step" data-a="cm" data-v="${i},-10" ${prog || m <= 10 ? 'disabled' : ''}>−</button><span class="v" style="font-size:18px;min-width:96px">${this._dur(m)}</span><button class="step" data-a="cm" data-v="${i},10" ${prog || m >= 1440 ? 'disabled' : ''}>＋</button></div>`).join('')}
+      ${cs.steps.length < 8 ? `<div class="chips" style="margin-top:10px"><button data-a="cadd" ${prog ? 'disabled' : ''}>＋ 新增一段</button></div>` : ''}
+      <div class="row"><span class="l">加熱功率</span></div>
+      <div class="chips">${POWERS.map(([v, n]) => `<button data-a="cp" data-v="${v}" class="${cs.power === v ? 'on' : ''}" ${prog ? 'disabled' : ''}>${n}</button>`).join('')}</div>
+      ${prog ? `<div class="note" style="margin-top:12px">程式執行中：第 ${pstep}／${ptotal} 段${pendTxt ? '，本段 ' + pendTxt + ' 結束' : ''}</div>
+        <button class="go ${ask === 'cstop' ? 'ask' : 'stop'}" data-a="cstop">${ask === 'cstop' ? '再按一次確認停止' : '停止程式'}</button>`
+      : `<button class="go ${ask === 'cgo' ? 'ask' : ''}" data-a="cgo" ${idle ? '' : 'disabled'}>${!idle ? '電鍋使用中' : ask === 'cgo' ? '再按一次：確認內鍋已放好食材與水' : cs.steps.length > 1 ? `開始 ${cs.steps.length} 段程式` : '開始恆溫'}</button>`}
+      <div class="note">電鍋自己控溫、時間到自己停。多段程式每換一段會嗶一聲${cs.steps.length > 1 ? `；總長 ${this._dur(cs.steps.reduce((a, q) => a + q[1], 0))}` : ''}。<br>鍋底感測器會比水溫高約 1～3 °C，請以食材溫度計為準。</div>`;
     this.shadowRoot.innerHTML = `<style>${css}</style>
     <ha-card style="--acc:${acc}">
       <div class="top"><ha-icon icon="mdi:pot-steam-outline" style="color:var(--acc)"></ha-icon><div class="t">米家電子鍋</div><div class="chip">${label}</div></div>
       <div class="ring"><svg viewBox="0 0 200 200">
         <circle cx="100" cy="100" r="${R}" fill="none" stroke="currentColor" stroke-opacity=".12" stroke-width="14" stroke-linecap="round" stroke-dasharray="${arc} ${C}"/>
         <circle cx="100" cy="100" r="${R}" fill="none" stroke="var(--acc)" stroke-width="14" stroke-linecap="round" stroke-dasharray="${arc * frac} ${C}"/>
-        ${sv ? `<circle cx="${tx}" cy="${ty}" r="8" fill="#fff" stroke="var(--acc)" stroke-width="4"/>` : ''}
       </svg><div class="c"><div class="big">${st === 'unavailable' ? '--' : temp}<small>°C</small></div><div class="sub">${sub}</div></div></div>
       ${remain != null ? `<div class="bar"><i style="width:${pct}%"></i></div>` : '<div style="height:12px"></div>'}
-      <div class="seg"><button data-a="tab" data-v="cook" class="${tab === 'cook' ? 'on' : ''}">烹飪</button><button data-a="tab" data-v="rc" class="${tab === 'rc' ? 'on' : ''}">食譜</button><button data-a="tab" data-v="sv" class="${tab === 'sv' ? 'on' : ''}">舒肥</button></div>
-      ${tab === 'cook' ? panelCook : tab === 'rc' ? panelRc : panelSv}
+      <div class="seg"><button data-a="tab" data-v="cook" class="${tab === 'cook' ? 'on' : ''}">烹飪</button><button data-a="tab" data-v="rc" class="${tab === 'rc' ? 'on' : ''}">食譜</button><button data-a="tab" data-v="cs" class="${tab === 'cs' ? 'on' : ''}">自訂</button></div>
+      ${tab === 'cook' ? panelCook : tab === 'rc' ? panelRc : panelCs}
     </ha-card>`;
     this.shadowRoot.querySelectorAll('[data-a]').forEach((b) => b.addEventListener('click', () => this._act(b.dataset.a, b.dataset.v)));
   }
 }
 customElements.define('cooker-card', CookerCard);
 window.customCards = window.customCards || [];
-window.customCards.push({ type: 'cooker-card', name: '米家電子鍋', description: '電子鍋：原廠模式、全部食譜（含優格）、預約、舒肥外部控溫' });
+window.customCards.push({ type: 'cooker-card', name: '米家電子鍋', description: '電子鍋：原廠模式、全部食譜（含優格）、預約、自訂恆溫與多段程式' });
