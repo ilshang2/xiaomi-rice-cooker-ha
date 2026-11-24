@@ -1,7 +1,7 @@
-"""Generate the demo video (about 43 s, 1080p, bilingual captions).
+"""Generate the demo video (about 42 s, 1080p, bilingual captions).
 產生示範影片（約 43 秒、1080p、中英雙語字幕）。
 Needs / 需要: pip install pillow imageio-ffmpeg ; Windows fonts msjh*.ttc (change BOLD/REG on other OS)
-Assets: docs/img/card-*.png (screenshots), data/recipe-*.csv (measured curves).
+Assets: docs/img/card-*.png (screenshots), data/hold-55c.csv (measured 55 C hold).
 Screenshots of the running states use sample values (rendered from the real card with overridden states).
 Run: python make_demo.py  ->  demo.mp4
 """
@@ -88,114 +88,106 @@ def s1(t):
 
 def s2(t):
     im = base()
-    phone(im, "card-cook-idle.png", 150, 90, 900, "card-cook-running.png", ease(seg(t, 3.0, 3.8)))
+    phone(im, "card-cook-running.png", 200, 120, 840)
     callouts(im, t, [
         ("6 種原廠模式，按兩下確認", "6 native modes, two-tap confirm", 0.6, ACC),
-        ("「自選」自動顯示 App 的食譜名", "Custom slot shows the app's recipe name", 1.6, GOOD),
-        ("烹飪中顯示食譜與剩餘時間", "Running recipe + time left", 3.0, WARN),
-        ("其餘 App 食譜列出原廠時間", "Other app recipes listed (read-only)", 4.4, MUTED)], 44)
+        ("「自選」顯示 App 裡的食譜名", "Custom slot shows the app's recipe name", 1.6, GOOD),
+        ("烹飪中顯示食譜、剩餘時間", "Running recipe and time left", 3.2, WARN),
+        ("最近 90 分鐘的溫度走勢", "90-minute temperature trace", 4.4, MUTED)], 44)
     return im
 
 
 def s3(t):
     im = base()
-    phone(im, "card-sousvide-recipes.png", 150, 90, 900, "card-sousvide-running.png", ease(seg(t, 4.0, 4.8)))
+    phone(im, "card-recipes.png", 200, 150, 800)
     callouts(im, t, [
-        ("舒肥：任意溫度、時間最長 24 小時", "Any target temperature, up to 24 h", 0.6, ACC),
-        ("食譜預設：優格、溫泉蛋、鮭魚、牛排…", "Presets: yogurt, eggs, salmon, steak…", 1.6, GOOD),
-        ("一般 ±1°C ／ 安靜模式提示音少 3/4", "Normal ±1 °C / quiet mode: ~1/4 of the beeps", 2.8, WARN),
-        ("過溫與感測離線自動保護", "Over-temperature & sensor-loss protection", 4.6, MUTED)], 40)
+        ("另外 11 種 App 專屬食譜，含優格", "11 more app-only recipes, incl. yogurt", 0.6, ACC),
+        ("可調時間、預約開始、煮好自動保溫", "Adjustable time, scheduled start, auto keep-warm", 1.6, GOOD),
+        ("優格發酵溫度 30–50°C 可自訂", "Yogurt fermentation temperature 30–50 °C", 2.8, WARN),
+        ("封包在瀏覽器組好，區網直送，不經雲端", "Built in the browser, sent locally, no cloud", 4.0, MUTED)], 40)
     return im
 
 
 def s4(t):
     im = base()
-    bi(im, (W // 2, 120), "嬰兒粥：兩段式食譜", "Baby porridge: a two-step recipe", 70, FG, ease(seg(t, 0, .5)))
-    boxes = [("① 55°C 吸水 30 分", "Soak at 55 °C, 30 min", "我們的外部控溫", "our thermostat", ACC),
-             ("② 原廠煮粥程式", "Native congee program", "煮滾 → 微滾 → 保溫", "boil → simmer → keep warm", GOOD)]
-    for i, (zh, en, a, b, c) in enumerate(boxes):
-        k = ease(seg(t, .8 + i * 1.4, 1.5 + i * 1.4))
-        x = 230 + i * 760; y = 360; off = (1 - k) * 40
-        rrect(im, (x, y + off, x + 680, y + 360 + off), 36, PANEL, c, 6, k)
-        bi(im, (x + 340, y + 90 + off), zh, en, 52, FG, k)
-        bi(im, (x + 340, y + 250 + off), a, b, 40, c, k)
-    ka = ease(seg(t, 2.0, 2.6)); d = ImageDraw.Draw(im)
-    d.line((925, 540, 925 + 50 * ka, 540), fill=ACC + (255,), width=10)
-    if ka > .9:
-        d.polygon([(965, 510), (965, 570), (1000, 540)], fill=ACC + (255,))
-    bi(im, (W // 2, 880), "時間到，自動接著啟動，不用人在旁邊按", "When the time is up it starts the next step by itself", 46, MUTED, ease(seg(t, 3.5, 4.2)))
+    phone(im, "card-custom.png", 200, 40, 1000)
+    callouts(im, t, [
+        ("舒肥分頁：自己設計恆溫食譜", "Sous-vide tab: design your own hold", 0.6, ACC),
+        ("30–90°C、最長 24 小時、最多 8 段", "30–90 °C, up to 24 h, up to 8 steps", 1.6, GOOD),
+        ("溫泉蛋、雞胸、牛排、鮭魚…一鍵載入", "Presets: egg, chicken, steak, salmon…", 2.8, WARN),
+        ("估計水溫、溫度走勢、存成常用 ★", "Water estimate, trace, saved favourites ★", 4.0, MUTED)], 40)
     return im
+
+
+def hold_curve():
+    rows = list(csv.reader(open(DATA("hold-55c.csv"), encoding="utf-8")))[1:]
+    return [(int(r[0]) / 60.0, float(r[3]), int(r[2])) for r in rows]
+
+
+HOLD = None
 
 
 def s5(t):
+    global HOLD
+    if HOLD is None:
+        HOLD = hold_curve()
     im = base()
-    bi(im, (W // 2, 110), "怎麼控溫？反覆開關「保溫」", "How? Toggle the built-in “keep warm” mode", 66, FG, ease(seg(t, 0, .5)))
-    x0, y0, x1, y1 = 260, 260, 1660, 800
-    rrect(im, (x0 - 40, y0 - 40, x1 + 40, y1 + 90), 28, PANEL)
-    tgt_y = y0 + 200
-    d = ImageDraw.Draw(im)
-    d.line((x0, tgt_y, x1, tgt_y), fill=WARN + (255,), width=4)
-    text(im, (x1 - 10, tgt_y - 30), "target 目標", 34, WARN, False, anchor="rm")
-    pts = []
-    for i in range(int(1400 * seg(t, .8, 6.5))):
-        ph = (i / 140.0) % 1.0           # sawtooth: heat up 40 %, cool down 60 %
-        off = -ph / .4 * 110 if ph < .4 else -110 + (ph - .4) / .6 * 110
-        pts.append((x0 + i, tgt_y + 60 + off))
-    if len(pts) > 1:
-        d.line(pts, fill=ACC + (255,), width=6)
-    text(im, (x0 + 10, y1 + 45), "加熱到 目標-1.5°C 就停、降到 目標-2°C 再開　Stop at -1.5 °C, restart at -2 °C", 36, MUTED, False, anchor="lm")
-    return im
-
-
-def curve(csvname):
-    rows = [r for r in list(csv.reader(open(DATA(csvname), encoding="utf-8")))[1:] if r[1] == "busy"]
-    t0 = None; pts = []
-    for r in rows:
-        h, m, s = map(int, r[0].split(":"))
-        sec = h * 3600 + m * 60 + s
-        t0 = sec if t0 is None else t0
-        pts.append(((sec - t0) / 60.0, float(r[6])))
-    return pts
-
-
-CURVES = None
-
-
-def s6(t):
-    global CURVES
-    if CURVES is None:
-        CURVES = [(curve("recipe-cake.csv"), WARN), (curve("recipe-noodle.csv"), ACC)]
-    im = base()
-    bi(im, (W // 2, 100), "煮滾型食譜無法模擬", "Boil-type recipes can't be imitated", 66, FG, ease(seg(t, 0, .5)))
+    bi(im, (W // 2, 100), "實測：55°C 恆溫 42 分鐘", "Measured: a 55 °C hold for 42 minutes", 66, FG, ease(seg(t, 0, .5)))
     x0, y0, x1, y1 = 260, 230, 1660, 780
     rrect(im, (x0 - 60, y0 - 40, x1 + 40, y1 + 90), 28, PANEL)
     d = ImageDraw.Draw(im)
-    for temp in (40, 60, 80, 100):
-        y = y1 - (temp - 20) / 100 * (y1 - y0)
-        d.line((x0, y, x1, y), fill=(71, 85, 105, 255), width=2)
-        text(im, (x0 - 14, y), f"{temp}°", 30, MUTED, False, anchor="rm")
-    prog = seg(t, .6, 5.0)
-    for pts, c in CURVES:
-        line = [(x0 + m / 16.0 * (x1 - x0), y1 - (v - 20) / 100 * (y1 - y0)) for m, v in pts if m / 16.0 <= prog]
-        if len(line) > 1:
-            d.line(line, fill=c + (255,), width=7)
+    Y = lambda v: y1 - (v - 40) / 30.0 * (y1 - y0)
+    X = lambda m: x0 + m / 43.0 * (x1 - x0)
+    for temp in (40, 50, 60, 70):
+        d.line((x0, Y(temp), x1, Y(temp)), fill=(71, 85, 105, 255), width=2)
+        text(im, (x0 - 14, Y(temp)), f"{temp}°", 30, MUTED, False, anchor="rm")
+    d.line((x0, Y(55), x1, Y(55)), fill=WARN + (255,), width=4)
+    text(im, (x1 - 10, Y(55) + 36), "目標 target 55°C", 32, WARN, False, anchor="rm")
+    prog = seg(t, .6, 5.6) * 43.0
+    line = [(X(m), Y(v)) for m, v, p in HOLD if m <= prog and v >= 40]
+    if len(line) > 1:
+        d.line(line, fill=ACC + (255,), width=7)
+    ks = ease(seg(t, 5.6, 6.2))
+    if ks > 0:
+        xs = X(30.6)
+        d.line((xs, y0, xs, y1), fill=GOOD + (int(255 * ks),), width=3)
+        text(im, (xs - 16, y0 + 24), "30 分：階段 1 → 8，溫度不掉　Phase 1 → 8, no drop", 32, GOOD, anchor="rm", alpha=ks)
     text(im, (x0 + 40, y1 + 45), "minutes 分鐘 →", 32, MUTED, False, anchor="lm")
-    text(im, (x1 - 20, y0 + 20), "蛋糕 cake", 36, WARN, anchor="rm")
-    text(im, (x1 - 20, y0 + 62), "泡麵 noodles", 36, ACC, anchor="rm")
-    bi(im, (W // 2, 930), "全力加熱到約 105°C；開關式控溫做不到", "They heat flat-out to ~105 °C; an on/off thermostat can't do that", 40, MUTED, ease(seg(t, 5.0, 5.8)))
+    bi(im, (W // 2, 930), "電鍋自己控溫；時間到停機，感測器比水溫高約 2–4°C", "The cooker thermostats itself and stops at the end (sensor reads 2–4 °C high)", 38, MUTED, ease(seg(t, 6.2, 7.0)))
+    return im
+
+
+def s6(t):
+    im = base()
+    bi(im, (W // 2, 120), "多段程式：HA 幫你換段", "Multi-step programs: Home Assistant switches the steps", 62, FG, ease(seg(t, 0, .5)))
+    boxes = [("① 55°C 吸水 30 分", "Soak at 55 °C, 30 min", "送出封包，電鍋自己控溫", "one packet, the cooker holds it", ACC),
+             ("② 85°C 慢燉 30 分", "Simmer at 85 °C, 30 min", "HA 取消、等待機、送下一段", "HA cancels, waits, sends the next", GOOD)]
+    for i, (zh, en, a, b, c) in enumerate(boxes):
+        k = ease(seg(t, .8 + i * 1.2, 1.5 + i * 1.2))
+        x = 230 + i * 760; y = 310; off = (1 - k) * 40
+        rrect(im, (x, y + off, x + 680, y + 340 + off), 36, PANEL, c, 6, k)
+        bi(im, (x + 340, y + 90 + off), zh, en, 50, FG, k)
+        bi(im, (x + 340, y + 245 + off), a, b, 36, c, k)
+    ka = ease(seg(t, 1.8, 2.4)); d = ImageDraw.Draw(im)
+    d.line((925, 480, 925 + 50 * ka, 480), fill=ACC + (255,), width=10)
+    if ka > .9:
+        d.polygon([(965, 450), (965, 510), (1000, 480)], fill=ACC + (255,))
+    bi(im, (W // 2, 790), "安全：逾時保險（時間到還在煮就自動取消並通知）", "Safety: a watchdog cancels and notifies if it keeps running", 44, WARN, ease(seg(t, 3.2, 3.9)))
+    bi(im, (W // 2, 930), "完成、中止都會推播到手機", "Push notification when it finishes or is aborted", 42, MUTED, ease(seg(t, 4.2, 4.9)))
     return im
 
 
 def s7(t):
     im = base()
-    text(im, (W // 2, 380), "開源 · MIT", 110, FG, alpha=ease(seg(t, 0, .6)))
-    text(im, (W // 2, 520), "Open source · MIT", 60, ACC, alpha=ease(seg(t, .3, .9)))
-    text(im, (W // 2, 700), "github.com/ilshang2/xiaomi-rice-cooker-ha", 58, FG, alpha=ease(seg(t, .8, 1.4)))
-    bi(im, (W // 2, 860), "中文／英文說明、安裝步驟、通訊協定筆記", "Bilingual docs, install steps, protocol notes", 40, MUTED, ease(seg(t, 1.2, 1.8)))
+    text(im, (W // 2, 330), "開源 · MIT · HACS", 110, FG, alpha=ease(seg(t, 0, .6)))
+    text(im, (W // 2, 470), "Open source · MIT · one-click HACS install", 56, ACC, alpha=ease(seg(t, .3, .9)))
+    text(im, (W // 2, 660), "github.com/ilshang2/xiaomi-rice-cooker-ha", 58, FG, alpha=ease(seg(t, .8, 1.4)))
+    bi(im, (W // 2, 820), "中文／英文說明、安裝步驟、通訊協定筆記", "Bilingual docs, install steps, protocol notes", 40, MUTED, ease(seg(t, 1.2, 1.8)))
+    bi(im, (W // 2, 960), "與小米無關．請內鍋放水測試，並留在附近", "Not affiliated with Xiaomi. Test with water and stay nearby", 34, MUTED, ease(seg(t, 1.8, 2.4)))
     return im
 
 
-SCENES = [(4.5, s1), (7.0, s2), (8.0, s3), (6.0, s4), (7.0, s5), (7.0, s6), (4.0, s7)]
+SCENES = [(4.5, s1), (6.5, s2), (6.0, s3), (6.5, s4), (8.0, s5), (6.0, s6), (4.0, s7)]
 
 
 def main():

@@ -73,7 +73,9 @@ See `../data/` for the raw cake and noodle samples.
 - **App recipe encoding: solved** (see [recipe-format.md](recipe-format.md)). It was found with a Frida hook on a
   rooted phone running Mi Home; the cooker's own plugin names every header field. Early attempts were ignored
   only because they had no heating curve.
-- The **heating curve** bytes are still only partly understood.
+- The **heating curve**: target temperature (`b2`) and power (`b4`) of a phase are decoded; `b1` can skip a phase;
+  `b5`, `b6`, `0x78` showed no effect in phases 0-2 (see [recipe-format.md](recipe-format.md)). No public documentation
+  of the curve format exists (we searched; python-miio only names the stages of older Chunmi models).
 - `mitmproxy` with a user-installed CA is rejected by the app; `adb logcat` shows nothing useful.
 - The Xiaomi cloud API returns 403 for this device; we did not try to get around it.
 - Hardware offload on a MikroTik router hides traffic between devices on the same bridge port, so LAN sniffing
@@ -81,6 +83,8 @@ See `../data/` for the raw cake and noodle samples.
 
 ## Ideas for contributors
 
-- Decode the heating-curve records (see "What is still unknown" in [recipe-format.md](recipe-format.md)).
+- Decode the rest of the heating curve: the second table of 14-byte blocks, the meaning of `b1`, and phases 3 and
+  later (they cannot be reached while phase 1 holds; a recipe whose flow reaches them is needed).
 - Test other firmware / models (`chunmi.cooker.*`) for additional `start-cook` parameters.
-- A cleaner sous-vide approach (PWM on keep warm?) and a verified upper temperature limit.
+- Check whether the occasional "does not stop at the end" behaviour (seen twice, not reproduced) has a cause, and
+  verify holds above 80 °C and full-length (hours) runs.
