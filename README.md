@@ -125,12 +125,6 @@ Details and measurements: [recipe format](docs/recipe-format.md#custom-constant-
   paediatric guideline, not this repository.
 - Never call the cooker's `set-factory-reset` action (siid 4, aiid 4) or write its `bell` property.
 
-## A wish for Xiaomi
-
-The heating-curve fields are still mostly undocumented and the cooker has no target-temperature property. If Xiaomi
-documents the curve, truly free ramps would be easy. (No pressure, no affiliation. Just a hopeful note from a user who
-loves the little cooker.)
-
 ## Data
 
 - `data/recipes.json`: the 15 recipe packets.
