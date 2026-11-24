@@ -40,7 +40,8 @@
   牛排、鮭魚、優格、慢燉、先吸水再煮）。單段只送一個封包（電鍋自己控溫、不會一直嗶）；多段交給
   `script.cooker_program`（[`ha/cooker_program.script.json`](ha/cooker_program.script.json)），一段結束就取消、
   等待機、送下一段。每個封包都帶自己的時間，所以 HA 當機電鍋也會在該段結束時自己停。
-  細節見[食譜格式](docs/recipe-format.zh-TW.md#自訂恆溫食譜)。
+  細節見[食譜格式](docs/recipe-format.zh-TW.md#自訂恆溫食譜)。執行中卡片會顯示估計水溫（感測器減 `offset`）與最近 90 分鐘溫度走勢，
+  也能把常用食譜存成 ★。兩條自動化提供**逾時保險**（預計結束後 5 分鐘電鍋還在煮就取消並通知）與**完成通知**。
 - [`tools/cookcode.py`](tools/cookcode.py) 與 [`data/recipes.json`](data/recipes.json)：在腳本與自動化裡組封包、送出。
 - [食譜格式](docs/recipe-format.zh-TW.md)與[通訊協定筆記](docs/protocol-notes.zh-TW.md)：關於這台電鍋，
   我們摸清的與沒摸清的全部整理。
@@ -57,7 +58,7 @@
 
 - 安裝 [`xiaomi_miot`](https://github.com/al-one/hass-xiaomi-miot) 整合（本地模式）並加入電鍋。實體名稱預期為
   `sensor.chunmi_tw1_c3d7_cooker`、`sensor.chunmi_tw1_c3d7_temp`、`button.chunmi_tw1_c3d7_cancel_cooking`…，
-  請把 YAML 與 `card/cooker-card.js` 開頭 `E` 表裡的 `c3d7` 換成你自己的裝置後綴。
+  請把 YAML 裡的 `c3d7` 換成你自己的裝置後綴，並在卡片設定裡填 `device:`（見下）。
 - [`ha/helpers.yaml`](ha/helpers.yaml) 的輔助實體、[`ha/cooker_program.script.json`](ha/cooker_program.script.json)
   （多段程式腳本），以及選用的 [`ha/automations.yaml`](ha/automations.yaml)（替「自選」按鈕命名）。
 
@@ -66,11 +67,16 @@
 1. **輔助實體**：把 `ha/helpers.yaml` 併入 `configuration.yaml`（或在介面建立同名實體），重新啟動。
 2. **腳本與自動化**：用 `ha/cooker_program.script.json` 建立腳本 `cooker_program`（多段程式需要）；選用：把
    `ha/automations.yaml` 加到你的 `automations.yaml`（替「自選」按鈕命名），修改實體 ID 後重新載入。
-3. **卡片**：把 `card/cooker-card.js` 複製到 `/config/www/cooker-card.js`，在「設定 → 儀表板 → 資源」新增
+3. **卡片**，二選一：
+   - **HACS**（建議）：*HACS → ⋮ → 自訂儲存庫*，加入 `https://github.com/ilshang2/xiaomi-rice-cooker-ha`，類別選「儀表板（Dashboard／plugin）」，再安裝 *Xiaomi Rice Cooker Card*。
+   - **手動**：把 `dist/cooker-card.js` 複製到 `/config/www/cooker-card.js`，在「設定 → 儀表板 → 資源」新增
    網址 `/local/cooker-card.js`、類型 *JavaScript 模組*；新增卡片：
    ```yaml
    type: custom:cooker-card
+   device: c3d7      # 你的裝置後綴（預設 c3d7）
+   offset: 2         # 感測器比水溫高約幾 °C（預設 2）
    ```
+   常用食譜（★）存在你使用的那個瀏覽器（localStorage）裡。
 4. 卡片介面文字是繁體中文，直接寫在檔案裡，要翻譯很容易。
 
 ## 多段程式原理

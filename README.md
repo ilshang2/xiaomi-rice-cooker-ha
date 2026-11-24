@@ -47,7 +47,10 @@ The cooker exposes **no target-temperature setting**, but its recipes are plain 
   `script.cooker_program` ([`ha/cooker_program.script.json`](ha/cooker_program.script.json)), which cancels, waits
   for idle and sends the next packet when a step ends. Each packet carries its own duration and the cooker normally stops by itself at the end of a step (we saw it twice keep
   running in a 480-min hold instead, so the script also cancels at every step end). If you pass `targets`, the card marks them on the ring. The temperature is held through the yogurt flow, see
-  [recipe format](docs/recipe-format.md#custom-constant-temperature-recipes).
+  [recipe format](docs/recipe-format.md#custom-constant-temperature-recipes). While running, the card shows an estimated
+  water temperature (sensor minus `offset`), a 90-minute temperature trace, and you can save favourite recipes (★).
+  Two automations add a **watchdog** (cancels and notifies if the cooker is still running 5 min after the planned end)
+  and a **completion notice**.
 - [`tools/cookcode.py`](tools/cookcode.py) and [`data/recipes.json`](data/recipes.json): build and send recipe
   packets from scripts and automations.
 - [Recipe format](docs/recipe-format.md) and [protocol notes](docs/protocol-notes.md): everything we learned
@@ -67,7 +70,7 @@ The cooker exposes **no target-temperature setting**, but its recipes are plain 
 - Home Assistant with the [`xiaomi_miot`](https://github.com/al-one/hass-xiaomi-miot) integration
   (local mode), with your cooker added. Entities are expected as `sensor.chunmi_tw1_c3d7_cooker`,
   `sensor.chunmi_tw1_c3d7_temp`, `button.chunmi_tw1_c3d7_cancel_cooking`, … — replace `c3d7` with your device's
-  suffix in the YAML and in the `E` table at the top of `card/cooker-card.js`.
+  suffix in the YAML, and set `device:` in the card config (below).
 - Helpers from [`ha/helpers.yaml`](ha/helpers.yaml), the script [`ha/cooker_program.script.json`](ha/cooker_program.script.json)
   (multi-step programs) and, optionally, the custom-slot automations in [`ha/automations.yaml`](ha/automations.yaml).
 
@@ -76,11 +79,16 @@ The cooker exposes **no target-temperature setting**, but its recipes are plain 
 1. **Helpers**: merge `ha/helpers.yaml` into `configuration.yaml` (or create the same entities in the UI), restart.
 2. **Script and automations**: create the script `cooker_program` from `ha/cooker_program.script.json` (needed for multi-step
    programs); optionally append `ha/automations.yaml` (names the *Custom* button), edit the entity IDs, reload.
-3. **Card**: copy `card/cooker-card.js` to `/config/www/cooker-card.js`, then *Settings → Dashboards →
+3. **Card**, either way:
+   - **HACS** (recommended): *HACS → ⋮ → Custom repositories* → add `https://github.com/ilshang2/xiaomi-rice-cooker-ha`, category *Dashboard* (plugin), then install *Xiaomi Rice Cooker Card*.
+   - **Manual**: copy `dist/cooker-card.js` to `/config/www/cooker-card.js`, then *Settings → Dashboards →
    Resources → Add*: URL `/local/cooker-card.js`, type *JavaScript module*. Add a card:
    ```yaml
    type: custom:cooker-card
+   device: c3d7      # your device suffix (default c3d7)
+   offset: 2         # sensor is about this many °C above the water (default 2)
    ```
+   Saved recipes (★) are stored in the browser (localStorage) of the device you use.
 4. The card's UI text is Traditional Chinese; the strings are plain literals in the file and easy to translate.
 
 ## How multi-step programs work

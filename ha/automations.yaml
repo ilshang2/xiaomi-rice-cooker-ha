@@ -60,3 +60,63 @@
     data:
       value: 0
   mode: single
+# 以下兩條：逾時保險與完成通知。把 notify.persistent_notification 換成你的手機，例如 notify.mobile_app_xxx
+- id: cooker_watchdog
+  alias: 電鍋：舒肥逾時保險
+  description: 舒肥的預計結束時間過了 5 分鐘電鍋還在煮，就取消並通知（電鍋偶爾時間到不會自己停）
+  triggers:
+  - trigger: time_pattern
+    minutes: /1
+  conditions:
+  - condition: state
+    entity_id: sensor.chunmi_tw1_c3d7_cooker
+    state: busy
+  - condition: numeric_state
+    entity_id: input_number.cooker_prog_target
+    above: 0
+  - condition: state
+    entity_id: script.cooker_program
+    state: 'off'
+  - condition: template
+    value_template: '{% set e = as_timestamp(states(''input_datetime.cooker_prog_end''),
+      0) %}{{ e > 1700000000 and as_timestamp(now()) > e + 300 }}'
+  actions:
+  - action: button.press
+    target:
+      entity_id: button.chunmi_tw1_c3d7_cancel_cooking
+  - action: input_number.set_value
+    target:
+      entity_id: input_number.cooker_prog_target
+    data:
+      value: 0
+  - action: notify.persistent_notification
+    data:
+      title: 電鍋
+      message: 舒肥時間到了電鍋沒有自己停，已自動取消
+  mode: single
+- id: cooker_done_notify
+  alias: 電鍋：舒肥完成通知
+  description: 單段舒肥結束（電鍋回到待機）時通知；多段程式由腳本自己通知
+  triggers:
+  - trigger: state
+    entity_id: sensor.chunmi_tw1_c3d7_cooker
+    from: busy
+    to: idle
+  conditions:
+  - condition: numeric_state
+    entity_id: input_number.cooker_prog_target
+    above: 0
+  - condition: state
+    entity_id: script.cooker_program
+    state: 'off'
+  actions:
+  - action: notify.persistent_notification
+    data:
+      title: 電鍋
+      message: 舒肥結束，電鍋已停止
+  - action: input_number.set_value
+    target:
+      entity_id: input_number.cooker_prog_target
+    data:
+      value: 0
+  mode: single

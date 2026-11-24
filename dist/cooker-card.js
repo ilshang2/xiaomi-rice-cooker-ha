@@ -1,6 +1,6 @@
 /* 米家電子鍋 mini 專用卡片（原廠模式、全部食譜、自訂恆溫／多段程式）。無外部相依，純 Web Component。
  * 實體寫死為這台電鍋；詳見 cooker/README.md */
-const E = {
+const E0 = {
   cooker: 'sensor.chunmi_tw1_c3d7_cooker', temp: 'sensor.chunmi_tw1_c3d7_temp',
   left: 'sensor.chunmi_tw1_c3d7_t_left', cook: 'sensor.chunmi_tw1_c3d7_t_cook',
   akw: 'switch.chunmi_tw1_c3d7_auto_keep_warm', sel: 'select.chunmi_tw1_c3d7_start_cook',
@@ -8,6 +8,7 @@ const E = {
   menu: 'sensor.chunmi_tw1_c3d7_menu', slot: 'input_text.cooker_slot5', pending: 'input_boolean.cooker_slot5_pending',
   prog: 'script.cooker_program', pstep: 'input_number.cooker_prog_step', ptotal: 'input_number.cooker_prog_total', pend: 'input_datetime.cooker_prog_end', ptgt: 'input_number.cooker_prog_target',
 };
+let E = E0, OFFSET = 2; // 實體表（setConfig 依 device 後綴換掉 c3d7）；鍋底感測器比水溫高約 2 °C
 const MODES = [ // [start-cook 參數, 名稱, 圖示]；7–15 電鍋會拒絕
   [1, '精煮飯', 'mdi:creation'], [2, '快煮飯', 'mdi:lightning-bolt'],
   [3, '煮粥', 'mdi:bowl-mix'], [4, '保溫', 'mdi:water'],
@@ -116,16 +117,43 @@ ha-card { padding:16px; --acc: var(--primary-color); overflow:hidden; }
 `;
 
 class CookerCard extends HTMLElement {
-  setConfig() { this._tab = null; this._ask = null; this._sig = ''; this._rc = null; this._cs = { steps: [[65, 60]], power: 32 }; }
+  setConfig(cfg) {
+    cfg = cfg || {};
+    const dev = String(cfg.device || 'c3d7');
+    E = Object.fromEntries(Object.entries(E0).map(([k, v]) => [k, v.replace('c3d7', dev)]));
+    OFFSET = cfg.offset != null ? +cfg.offset : 2;
+    try { this._saved = JSON.parse(localStorage.getItem('cooker-card-saved') || '[]'); } catch (e) { this._saved = []; }
+    this._hist = null; this._hts = 0;
+    this._tab = null; this._ask = null; this._sig = ''; this._rc = null; this._cs = { steps: [[65, 60]], power: 32 };
+  }
   getCardSize() { return 9; }
+  _persist() { try { localStorage.setItem('cooker-card-saved', JSON.stringify(this._saved)); } catch (e) { /* 無痕模式等情況不存 */ } }
   connectedCallback() { if (!this.shadowRoot) { this.attachShadow({ mode: 'open' }); } }
   set hass(h) {
     this._h = h;
     if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
     const s = (e) => (h.states[e] ? h.states[e].state : 'na');
-    const sig = Object.values(E).map(s).join('|') + '|' + this._tab + '|' + JSON.stringify(this._rc) + '|' + JSON.stringify(this._cs) + '|' + this._ask + '|' + Math.floor(Date.now() / 60000);
+    const sig = Object.values(E).map(s).join('|') + '|' + this._tab + '|' + JSON.stringify(this._rc) + '|' + JSON.stringify(this._cs) + '|' + JSON.stringify(this._saved) + '|' + (this._hist ? this._hist.length : 0) + '|' + this._ask + '|' + Math.floor(Date.now() / 60000);
     if (sig === this._sig) return;
     this._sig = sig; this._render();
+  }
+  _loadHist() {
+    if (!this._h.callApi || Date.now() - this._hts < 60000) return;
+    this._hts = Date.now();
+    const start = new Date(Date.now() - 90 * 60000).toISOString();
+    this._h.callApi('GET', `history/period/${start}?filter_entity_id=${E.temp}&minimal_response&no_attributes`).then((r) => {
+      const rows = (r && r[0]) || [];
+      this._hist = rows.map((x) => [new Date(x.last_changed || x.last_updated).getTime(), parseFloat(x.state)]).filter((x) => !isNaN(x[1]) && !isNaN(x[0]));
+      this._sig = ''; this._render();
+    }).catch(() => {});
+  }
+  _spark(tgt) {
+    const h = this._hist; if (!h || h.length < 3) return '';
+    const t1 = Date.now(), t0 = Math.max(h[0][0], t1 - 90 * 60000);
+    const vs = h.map((x) => x[1]).concat(tgt ? [tgt] : []), lo = Math.min(...vs) - 2, hi = Math.max(...vs) + 2;
+    const X = (t) => 4 + 292 * (t - t0) / Math.max(1, t1 - t0), Y = (v) => 50 - 44 * (v - lo) / Math.max(1, hi - lo);
+    const pts = h.map(([t, v]) => `${X(Math.max(t, t0)).toFixed(1)},${Y(v).toFixed(1)}`).join(' ') + ` ${X(t1).toFixed(1)},${Y(h[h.length - 1][1]).toFixed(1)}`;
+    return `<svg viewBox="0 0 300 56" style="width:100%;height:56px;margin-top:6px"><polyline points="${pts}" fill="none" stroke="var(--acc)" stroke-width="2.2" stroke-linejoin="round"/>${tgt ? `<line x1="4" x2="296" y1="${Y(tgt).toFixed(1)}" y2="${Y(tgt).toFixed(1)}" stroke="currentColor" stroke-opacity=".35" stroke-dasharray="4 4"/>` : ''}</svg><div class="note" style="margin-top:0">最近 90 分鐘內鍋溫度${tgt ? '（虛線＝目標）' : ''}</div>`;
   }
   _s(e) { const x = this._h.states[e]; return x ? x.state : 'unavailable'; }
   _n(e, d = 0) { const v = parseFloat(this._s(e)); return isNaN(v) ? d : v; }
@@ -147,10 +175,17 @@ class CookerCard extends HTMLElement {
     else if (a === 'ct') { const [i, d] = v.split(','); const q = this._cs.steps[+i]; q[0] = Math.min(90, Math.max(30, q[0] + +d)); }
     else if (a === 'cm') { const [i, d] = v.split(','); const q = this._cs.steps[+i]; q[1] = Math.min(1440, Math.max(10, q[1] + +d)); }
     else if (a === 'cp') this._cs.power = +v;
+    else if (a === 'csave') {
+      const n = this._cs.steps.map(([t, m]) => `${t}°${m >= 60 ? (m % 60 ? Math.floor(m / 60) + 'h' + (m % 60) : m / 60 + 'h') : m + 'm'}`).join('→');
+      if (!this._saved.some((x) => x.n === n && x.power === this._cs.power)) this._saved.push({ n, steps: this._cs.steps.map((q) => q.slice()), power: this._cs.power });
+      this._saved = this._saved.slice(-8); this._persist();
+    }
+    else if (a === 'cload') { const x = this._saved[+v]; if (x) { this._cs.steps = x.steps.map((q) => q.slice()); this._cs.power = x.power; } }
+    else if (a === 'csdel') { this._saved.splice(+v, 1); this._persist(); }
     else if (a === 'cgo') {
       const st = this._cs.steps, pw = this._cs.power;
       if (this._confirm('cgo')) {
-        if (st.length === 1) { this._call('input_number', 'set_value', { entity_id: E.ptgt, value: st[0][0] }); this._call('xiaomi_miot', 'call_action', { entity_id: E.cooker, siid: 4, aiid: 1, params: [buildHold(st[0][0], st[0][1], pw)] }); }
+        if (st.length === 1) { this._call('input_number', 'set_value', { entity_id: E.ptgt, value: st[0][0] }); this._call('input_datetime', 'set_datetime', { entity_id: E.pend, timestamp: Math.round(Date.now() / 1000) + st[0][1] * 60 }); this._call('xiaomi_miot', 'call_action', { entity_id: E.cooker, siid: 4, aiid: 1, params: [buildHold(st[0][0], st[0][1], pw)] }); }
         else this._call('script', 'cooker_program', { packets: st.map(([t, m]) => buildHold(t, m, pw)), minutes: st.map(([, m]) => m), targets: st.map(([t]) => t) });
       } return;
     }
@@ -181,6 +216,7 @@ class CookerCard extends HTMLElement {
     const ang = (270 * (tgt / 100)) * Math.PI / 180, tx = 100 + R * Math.cos(ang), ty = 100 + R * Math.sin(ang);
     const sub = tgt && remain != null ? `目標 ${tgt}°C · 剩 ${this._fmt(remain)}` : remain != null && st === 'busy' ? `剩 ${this._fmt(remain)}` : st === 'keep warm' ? `已保溫 ${this._fmt(left)}` : '內鍋溫度';
     const ask = this._ask;
+    if (st === 'busy') this._loadHist();
     const panelCook = `
       <div class="grid">${MODES.map(([o, n, i]) => `<button class="mode ${ask === 'mode' + o ? 'ask' : ''}" data-a="mode" data-v="${o}" ${idle ? '' : 'disabled style="opacity:.4"'}><ha-icon icon="${i}"></ha-icon>${ask === 'mode' + o ? '再按一次確認' : (o === 5 ? slotTxt : n)}</button>`).join('')}</div>
       ${!idle ? `<button class="go ${ask === 'cancel' ? 'ask' : 'stop'}" data-a="cancel">${ask === 'cancel' ? '再按一次確認停止' : '停止烹飪'}</button>` : ''}
@@ -199,13 +235,14 @@ class CookerCard extends HTMLElement {
     const pend = new Date(this._s(E.pend).replace(' ', 'T')), pendTxt = isNaN(pend) ? '' : pend.toTimeString().slice(0, 5);
     const panelCs = `
       <div class="chips">${HOLD_PRESETS.map(([n], i) => `<button data-a="csel" data-v="${i}" ${prog ? 'disabled' : ''}>${n}</button>`).join('')}</div>
+      ${this._saved.length ? `<div class="chips">${this._saved.map((x, i) => `<button data-a="cload" data-v="${i}" ${prog ? 'disabled' : ''}>★ ${x.n}</button><button data-a="csdel" data-v="${i}" style="padding:6px 8px">✕</button>`).join('')}</div>` : ''}
       ${cs.steps.map(([t, m], i) => `
         <div class="row" style="margin-top:14px"><span class="l">第 ${i + 1} 段</span>
           <button class="step" data-a="ct" data-v="${i},-1" ${prog || t <= 30 ? 'disabled' : ''}>−</button><span class="v" style="min-width:70px">${t}°C</span><button class="step" data-a="ct" data-v="${i},1" ${prog || t >= 90 ? 'disabled' : ''}>＋</button>
           ${cs.steps.length > 1 ? `<button class="step" data-a="cdel" data-v="${i}" ${prog ? 'disabled' : ''} style="font-size:16px">✕</button>` : ''}</div>
         <div class="row" style="margin:2px 0"><span class="l">　時間</span>
           <button class="step" data-a="cm" data-v="${i},-10" ${prog || m <= 10 ? 'disabled' : ''}>−</button><span class="v" style="font-size:18px;min-width:96px">${this._dur(m)}</span><button class="step" data-a="cm" data-v="${i},10" ${prog || m >= 1440 ? 'disabled' : ''}>＋</button></div>`).join('')}
-      ${cs.steps.length < 8 ? `<div class="chips" style="margin-top:10px"><button data-a="cadd" ${prog ? 'disabled' : ''}>＋ 新增一段</button></div>` : ''}
+      <div class="chips" style="margin-top:10px">${cs.steps.length < 8 ? `<button data-a="cadd" ${prog ? 'disabled' : ''}>＋ 新增一段</button>` : ''}<button data-a="csave">★ 存成常用</button></div>
       <div class="row"><span class="l">加熱功率</span></div>
       <div class="chips">${POWERS.map(([v, n]) => `<button data-a="cp" data-v="${v}" class="${cs.power === v ? 'on' : ''}" ${prog ? 'disabled' : ''}>${n}</button>`).join('')}</div>
       ${prog ? `<div class="note" style="margin-top:12px">程式執行中：第 ${pstep}／${ptotal} 段${pendTxt ? '，本段 ' + pendTxt + ' 結束' : ''}</div>
@@ -219,8 +256,9 @@ class CookerCard extends HTMLElement {
         <circle cx="100" cy="100" r="${R}" fill="none" stroke="currentColor" stroke-opacity=".12" stroke-width="14" stroke-linecap="round" stroke-dasharray="${arc} ${C}"/>
         <circle cx="100" cy="100" r="${R}" fill="none" stroke="var(--acc)" stroke-width="14" stroke-linecap="round" stroke-dasharray="${arc * frac} ${C}"/>
         ${tgt ? `<circle cx="${tx}" cy="${ty}" r="8" fill="#fff" stroke="var(--acc)" stroke-width="4"/>` : ''}
-      </svg><div class="c"><div class="big">${st === 'unavailable' ? '--' : temp}<small>°C</small></div><div class="sub">${sub}</div></div></div>
+      </svg><div class="c"><div class="big">${st === 'unavailable' ? '--' : temp}<small>°C</small></div><div class="sub">${sub}</div>${tgt ? `<div class="sub" style="opacity:.75">估計水溫約 ${Math.round(temp - OFFSET)}°C</div>` : ''}</div></div>
       ${remain != null ? `<div class="bar"><i style="width:${pct}%"></i></div>` : '<div style="height:12px"></div>'}
+      ${st === 'busy' ? this._spark(tgt) : ''}
       <div class="seg"><button data-a="tab" data-v="cook" class="${tab === 'cook' ? 'on' : ''}">烹飪</button><button data-a="tab" data-v="rc" class="${tab === 'rc' ? 'on' : ''}">食譜</button><button data-a="tab" data-v="cs" class="${tab === 'cs' ? 'on' : ''}">舒肥</button></div>
       ${tab === 'cook' ? panelCook : tab === 'rc' ? panelRc : panelCs}
     </ha-card>`;
