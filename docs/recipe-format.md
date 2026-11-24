@@ -85,7 +85,7 @@ byte 7 is not validated.
 Bytes 20-173 are the heating curve: from byte 26 on, a table of 7-byte **phase records**
 `91 b1 b2 78 b4 b5 b6` (record *i* starts at byte `26 + 7*i`), plus a second table of 14-byte blocks in some
 recipes. The cooker's `phase` property (siid 4, piid 18) is the record index. Record 0 of the yogurt curve
-(`... 00 1e 00`) is a 30 s wait, and the cooker really sits in phase 0 for about 30 s.
+(`... 00 1e 00`) is a 30 s wait, and the cooker really sits in phase 0 for about 30 s (changing its `1e` does not change that: the wait is fixed in firmware).
 
 Measured on a real cooker (yogurt curve, phase 1, 1 L of water starting at room temperature):
 
@@ -93,8 +93,9 @@ Measured on a real cooker (yogurt curve, phase 1, 1 L of water starting at room 
 |---|---|---|
 | **`b2`** | **target temperature of the phase, in degrees C** | `29` (41 C): heating stopped at about 44 C and the reading fell back. Changed to `37` (55 C): kept heating past 44 C up to the 54 C safety stop |
 | **`b4`** | **heating power level** | `03`: about +0.3 C/min. `10`: +2.1 C/min. `20`: +5 to 7 C/min. `40`: about +5.6 C/min (close to `20`, so it may saturate near `20`). `08`: barely beats heat loss at 67 C |
-| `b1` | not power. In record 3 it changes the entry/skip behaviour of phase 3 (`20`, `2b`, `ff` were skipped) but not the heating rate | open |
-| `b5`, `b6`, `78` and the second table | unknown | open |
+| `b1` | not power, not an exit temperature. A small value (`01`) makes the cooker skip that phase at once (phase 0 and phase 1 both tested: phase 1 skipped, flow went 0 -> 1 -> 4 -> 8); `40`, `62`, `82`, `ff` ran normally, and `62` did not end phase 1 when the pot passed 62 C. Its exact meaning is open | partly |
+| `b5`, `b6`, `78` | no observable effect in phases 0-2: values `01`, `40`, `ff` (and `b5` = 5, 20, 60) left the flow and temperature unchanged, and phase 0 always lasts about 31 s. Phases 3 and later cannot be reached while phase 1 holds, so they were not tested | no effect seen |
+| second table (14-byte blocks) | not tested | open |
 
 The default values `7d` (125), `6e` (110), `82` (130), `78` (120) that fill most records look like "no limit"
 temperatures. These findings come from yogurt phase 1 and a few noodle runs; other phases are assumed to use the
