@@ -10,8 +10,9 @@ The cooker has no target-temperature setting, but its recipes are plain 176-byte
 
 1. **Start all 15 built-in recipes from Home Assistant**, including the app-only ones such as yogurt, with your own
    duration, scheduled start and auto-keep-warm ([packet format](docs/recipe-format.md)).
-2. **Design your own constant-temperature recipes**: 30–90 °C, up to 24 h, up to 8 steps in a row. The cooker holds
-   the temperature with its own thermostat — no relay-style on/off control from Home Assistant, no beeping.
+2. **Design your own constant-temperature recipes**: 30–90 °C can be set (we tested 45–75 °C), up to 24 h, up to 8 steps
+   in a row. The cooker holds the temperature with its own thermostat — no relay-style on/off control from Home
+   Assistant, no beeping.
 
 > **Not affiliated with Xiaomi.** A hobby reverse-engineering project, use at your own risk. Read the
 > [safety notes](#safety-and-limits) first.
@@ -45,8 +46,8 @@ for every start, and a countdown.
   two-step example. Save your own favourites (★).
   - One step is a single packet; the cooker keeps the temperature and stops by itself.
   - Several steps run through a Home Assistant script that switches to the next step when a step ends.
-  - While running, the card shows an estimated water temperature (sensor reading minus `offset`), the target on the
-    temperature ring and a 90-minute temperature trace.
+  - While running, the card shows an *estimated* water temperature (sensor reading minus `offset`, see the safety
+    notes: the offset is an assumption), the target on the temperature ring and a 90-minute temperature trace.
 
 Two optional automations add a **watchdog** (cancels and notifies if the cooker is still running 5 minutes after the
 planned end) and a **completion notice**.
@@ -80,7 +81,7 @@ everything we learned (and did not learn) about this cooker.
    ```yaml
    type: custom:cooker-card
    device: c3d7      # your device suffix (default c3d7)
-   offset: 2         # the sensor reads about this many °C above the water (default 2)
+   offset: 2         # assumed °C by which the sensor reads above the water (default 2, not calibrated)
    ```
 
 Saved recipes (★) are stored in the browser (localStorage) of the device you use. The card's text is Traditional
@@ -108,14 +109,19 @@ Details and measurements: [recipe format](docs/recipe-format.md#custom-constant-
   firmware decides the phase flow of each recipe id, so the Sous-vide tab builds constant-temperature holds (and chains
   of them), not arbitrary ramps. The other curve fields showed no effect in our tests.
 - Boil-type recipes (cake, instant noodles, rice) heat flat-out to ~100–105 °C by design.
-- The cooker offers no target-temperature property and no way to read the real water temperature.
+- The cooker offers no target-temperature property and no way to read the real water temperature. The pot sensor has
+  **not been calibrated** against an independent thermometer.
 
 ## Safety and limits
 
 - **Always test with water in the pot, and stay nearby.** Heating is started by software; sending a recipe starts
   heating immediately.
-- The temperature sensor sits under the pot and reads 2–4 °C above the water while heating (and is wrong right after
-  adding cold water). Trust a food thermometer. Holds above ~80 °C are lightly tested.
+- **The pot sensor is not calibrated.** It sits under the pot, is wrong right after adding cold water, and we never
+  compared it with an independent thermometer, so its offset from the real water temperature is unknown (the card's
+  `offset: 2` is a guess). Measure your own water with a food thermometer and adjust `offset` / the target.
+  On the sensor, a 55 °C hold swings about ±2 °C (54–58 °C).
+- **Tested range: holds between 45 and 75 °C.** Targets of 30–45 °C and 75–90 °C can be set but were never run, and
+  neither were the 85 °C presets (slow stew, the two-step example) or runs longer than 42 minutes.
 - **The cooker usually stops by itself when the time is up, but not always** — twice in testing it continued in a
   480-minute hold instead (we could not reproduce it). Multi-step programs cancel at the end of every step, and the
   optional watchdog automation cancels a run that is still going 5 minutes after its planned end. Do not leave a

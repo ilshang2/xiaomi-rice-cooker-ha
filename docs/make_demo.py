@@ -153,7 +153,7 @@ def s5(t):
         d.line((xs, y0, xs, y1), fill=GOOD + (int(255 * ks),), width=3)
         text(im, (xs - 16, y0 + 24), "30 分：階段 1 → 8，溫度不掉　Phase 1 → 8, no drop", 32, GOOD, anchor="rm", alpha=ks)
     text(im, (x0 + 40, y1 + 45), "minutes 分鐘 →", 32, MUTED, False, anchor="lm")
-    bi(im, (W // 2, 930), "電鍋自己控溫；時間到停機，感測器比水溫高約 2–4°C", "The cooker thermostats itself and stops at the end (sensor reads 2–4 °C high)", 38, MUTED, ease(seg(t, 6.2, 7.0)))
+    bi(im, (W // 2, 930), "電鍋自己控溫；圖為鍋底感測器讀數（未經校正）", "The cooker thermostats itself and stops at the end (pot-sensor readings, not calibrated)", 38, MUTED, ease(seg(t, 6.2, 7.0)))
     return im
 
 

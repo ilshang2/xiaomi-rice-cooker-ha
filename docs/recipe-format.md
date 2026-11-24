@@ -122,7 +122,7 @@ keeps its default 40 C target, the pot cools down (77 -> 63 C over 60 min), whic
 Chaining several holds is done by the card / `script.cooker_program`: cancel, wait for idle, send the next packet
 (a packet sent while the cooker is busy is ignored). Verified on a real cooker with a 2 x 2 min program (50 C then 60 C).
 
-Cold start (1 L of room-temperature water, target 50 C, power 32, 18 min): the sensor read 42-44 C for the first minute (cold water against a warm pot base), reached 50 C after about 3 min, then stayed at 50-54 C for the rest of the run, with a maximum of 54 C and no runaway overshoot. Expect the sensor to sit 2-4 C above the real water temperature.
+Cold start (1 L of room-temperature water, target 50 C, power 32, 18 min): the sensor read 42-44 C for the first minute (cold water against a warm pot base), reached 50 C after about 3 min, then stayed at 50-54 C for the rest of the run, with a maximum of 54 C and no runaway overshoot. The sensor was never compared with an independent thermometer, so its offset from the real water temperature is unknown.
 
 ## Legal / ethics
 

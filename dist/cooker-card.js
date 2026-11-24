@@ -8,7 +8,7 @@ const E0 = {
   menu: 'sensor.chunmi_tw1_c3d7_menu', slot: 'input_text.cooker_slot5', pending: 'input_boolean.cooker_slot5_pending',
   prog: 'script.cooker_program', pstep: 'input_number.cooker_prog_step', ptotal: 'input_number.cooker_prog_total', pend: 'input_datetime.cooker_prog_end', ptgt: 'input_number.cooker_prog_target',
 };
-let E = E0, OFFSET = 2; // 實體表（setConfig 依 device 後綴換掉 c3d7）；鍋底感測器比水溫高約 2 °C
+let E = E0, OFFSET = 2; // 實體表（setConfig 依 device 後綴換掉 c3d7）；預設假設感測器比水溫高 2 °C（未校正）
 const MODES = [ // [start-cook 參數, 名稱, 圖示]；7–15 電鍋會拒絕
   [1, '精煮飯', 'mdi:creation'], [2, '快煮飯', 'mdi:lightning-bolt'],
   [3, '煮粥', 'mdi:bowl-mix'], [4, '保溫', 'mdi:water'],
@@ -248,7 +248,7 @@ class CookerCard extends HTMLElement {
       ${prog ? `<div class="note" style="margin-top:12px">程式執行中：第 ${pstep}／${ptotal} 段${pendTxt ? '，本段 ' + pendTxt + ' 結束' : ''}</div>
         <button class="go ${ask === 'cstop' ? 'ask' : 'stop'}" data-a="cstop">${ask === 'cstop' ? '再按一次確認停止' : '停止程式'}</button>`
       : `<button class="go ${ask === 'cgo' ? 'ask' : ''}" data-a="cgo" ${idle ? '' : 'disabled'}>${!idle ? '電鍋使用中' : ask === 'cgo' ? '再按一次：確認內鍋已放好食材與水' : cs.steps.length > 1 ? `開始 ${cs.steps.length} 段程式` : '開始恆溫'}</button>`}
-      <div class="note">電鍋自己控溫；時間到通常會自己停，多段程式每段結束由 HA 取消並換段（換段會嗶一聲${cs.steps.length > 1 ? `；總長 ${this._dur(cs.steps.reduce((a, q) => a + q[1], 0))}` : ''}）。<br>鍋底感測器會比水溫高約 1～3 °C，請以食材溫度計為準。</div>`;
+      <div class="note">電鍋自己控溫；時間到通常會自己停，多段程式每段結束由 HA 取消並換段（換段會嗶一聲${cs.steps.length > 1 ? `；總長 ${this._dur(cs.steps.reduce((a, q) => a + q[1], 0))}` : ''}）。<br>鍋底感測器未經校正，與水溫的差距未知，請以食材溫度計為準。</div>`;
     this.shadowRoot.innerHTML = `<style>${css}</style>
     <ha-card style="--acc:${acc}">
       <div class="top"><ha-icon icon="mdi:pot-steam-outline" style="color:var(--acc)"></ha-icon><div class="t">米家電子鍋</div><div class="chip">${label}</div></div>
