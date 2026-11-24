@@ -24,7 +24,9 @@
 
 ![示範動畫](docs/demo.gif)
 
-[下載 1080p 示範影片（mp4）](docs/demo.mp4)
+[![在 YouTube 觀看](https://img.youtube.com/vi/ur2tDmEzq1M/hqdefault.jpg)](https://youtu.be/ur2tDmEzq1M)
+
+**▶ [在 YouTube 觀看](https://youtu.be/ur2tDmEzq1M)**（約 42 秒）｜[下載 1080p mp4](docs/demo.mp4)
 
 ## 卡片功能
 

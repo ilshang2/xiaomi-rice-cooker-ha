@@ -25,7 +25,9 @@ The cooker has no target-temperature setting, but its recipes are plain 176-byte
 
 ![Demo animation](docs/demo.gif)
 
-[Download the 1080p demo video (mp4)](docs/demo.mp4)
+[![Watch on YouTube](https://img.youtube.com/vi/ur2tDmEzq1M/hqdefault.jpg)](https://youtu.be/ur2tDmEzq1M)
+
+**▶ [Watch on YouTube](https://youtu.be/ur2tDmEzq1M)** (≈42 s) | [download the 1080p mp4](docs/demo.mp4)
 
 ## The card
 
